@@ -23,6 +23,7 @@ class Question:
 class Answer:
     text: str
     compliant: bool
+    game_over: bool = False
 
 
 @dataclass
