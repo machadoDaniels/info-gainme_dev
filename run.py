@@ -10,47 +10,17 @@ This script demonstrates the complete benchmark flow:
 
 from os import getenv
 from dotenv import load_dotenv
-
 from src.runner import BenchmarkRunner
 from src.graph import KnowledgeGraph, Node
 from src.entropy import Entropy
 from src.agents.llm_adapter import LLMAdapter, LLMConfig
 from src.agents.seeker import SeekerAgent
 from src.agents.oracle import OracleAgent
+from src.agents.pruner import PrunerAgent
 from src.data_types import ObservabilityMode
-
-
-def create_sample_graph() -> KnowledgeGraph:
-    """Create a small knowledge graph for testing."""
-    nodes = {
-        Node(
-            id="paris", 
-            label="Paris", 
-            attrs={"continent": "europe", "country": "france", "capital": "true", "population": "2161000"}
-        ),
-        Node(
-            id="london", 
-            label="London", 
-            attrs={"continent": "europe", "country": "uk", "capital": "true", "population": "8982000"}
-        ),
-        Node(
-            id="berlin", 
-            label="Berlin", 
-            attrs={"continent": "europe", "country": "germany", "capital": "true", "population": "3669000"}
-        ),
-        Node(
-            id="rome", 
-            label="Rome", 
-            attrs={"continent": "europe", "country": "italy", "capital": "true", "population": "2873000"}
-        ),
-        Node(
-            id="madrid", 
-            label="Madrid", 
-            attrs={"continent": "europe", "country": "spain", "capital": "true", "population": "3223000"}
-        ),
-    }
-    return KnowledgeGraph(nodes=nodes)
-
+from src.domain.geo.loader import load_geo_graph
+from pathlib import Path
+from random import choice
 
 def main() -> None:
     """Run the benchmark demonstration."""
@@ -60,14 +30,16 @@ def main() -> None:
     print("=" * 50)
     
     # Create knowledge graph
-    graph = create_sample_graph()
+    graph = load_geo_graph(csv_path=Path("data/top_20_pop_cities.csv"))
     active_nodes = graph.get_active_nodes()
     
     print(f"📍 Knowledge Graph: {len(active_nodes)} nodes")
     for node in sorted(active_nodes, key=lambda n: n.id):
         attrs_str = ", ".join(f"{k}={v}" for k, v in node.attrs.items())
         print(f"   - {node.id}: {node.label} ({attrs_str})")
-    
+
+    graph.plot(output_path="output/sample_graph.png")
+
     # Set up LLM configuration
     api_key = getenv("OPENAI_API_KEY")
     if not api_key:
@@ -83,18 +55,25 @@ def main() -> None:
     # Create separate LLM adapters for each agent
     seeker_adapter = LLMAdapter(config)
     oracle_adapter = LLMAdapter(config)
+    pruner_adapter = LLMAdapter(config, save_history=False)
     
-    # Choose target randomly or fix it for testing
-    target_node = next(n for n in active_nodes if n.id == "paris")
+    # Choose target randomly
+    active_cities = [node for node in active_nodes if node.attrs.get("type") == "city"]
+    target_node = choice(active_cities)
     
     # Create agents
-    seeker = SeekerAgent(seeker_adapter, ObservabilityMode.FULLY_OBSERVED)
+    seeker = SeekerAgent(
+        llm_adapter=seeker_adapter, 
+        observability_mode=ObservabilityMode.FULLY_OBSERVED
+        )
+        
     oracle = OracleAgent(
-        model="gpt-4o-mini",
         llm_adapter=oracle_adapter,
         target_node_id=target_node.id,
         target_node=target_node
     )
+    
+    pruner = PrunerAgent(llm_adapter=pruner_adapter)
     
     # Create entropy calculator
     entropy = Entropy()
@@ -104,9 +83,10 @@ def main() -> None:
         graph=graph,
         seeker=seeker,
         oracle=oracle,
+        pruner=pruner,
         entropy=entropy,
-        max_turns=7,
-        h_threshold=None,
+        max_turns=40,
+        h_threshold=None
     )
     
     print(f"\n🎯 Configuration:")
@@ -120,31 +100,7 @@ def main() -> None:
         print(f"\n🚀 Starting benchmark run...")
         print("   (This may take a moment as agents generate responses...)\n")
         
-        runner.run()
-        
-        # Show summary
-        summary = runner.get_summary()
-        print(f"📊 Benchmark Summary:")
-        print(f"   - Turns completed: {summary['turns']}")
-        if summary['h_start'] is not None:
-            print(f"   - Initial entropy: {summary['h_start']:.3f}")
-        if summary['h_end'] is not None:
-            print(f"   - Final entropy: {summary['h_end']:.3f}")
-        print(f"   - Total info gain: {summary['total_info_gain']:.3f}")
-        
-        # Show detailed turn history
-        print(f"\n💬 Turn-by-Turn History:")
-        for turn in runner.turns:
-            print(f"\n🔄 Turn {turn.turn_index}:")
-            print(f"   🤖 Seeker: \"{turn.question.text}\"")
-            print(f"   🔮 Oracle: \"{turn.answer.text}\" (compliant: {turn.answer.compliant})")
-            print(f"   📈 Entropy: {turn.h_before:.3f} → {turn.h_after:.3f} (gain: {turn.info_gain:.3f})")
-            print(f"   ✂️  Pruned: {turn.pruned_count} nodes")
-        
-        # Show agent usage stats
-        print(f"\n📊 Agent Statistics:")
-        print(f"   - Seeker questions asked: {seeker.questions_asked}")
-        print(f"   - Oracle answers given: {oracle.answers_given}")
+        runner.run(debug=True)
         
         # Final result
         if runner.turns:
