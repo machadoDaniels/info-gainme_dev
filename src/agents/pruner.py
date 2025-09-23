@@ -11,203 +11,82 @@ from typing import Set
 from ..data_types import Answer, PruningResult, Question
 from ..graph import Node
 from .llm_adapter import LLMAdapter
+from ..prompts import get_pruner_system_prompt
+from ..utils.utils import parse_first_json_object
 
 
 class PrunerAgent:
-    """Agent that prunes nodes based on deterministic rules.
+    """Agent responsible for deterministic pruning based on question-answer analysis.
     
-    This agent applies rule-based logic to eliminate nodes that are
-    inconsistent with the Oracle's answers to Seeker's questions.
+    The PrunerAgent uses rule-based logic to determine which nodes should be
+    pruned from the knowledge graph based on the Seeker's question and the
+    Oracle's answer. It maintains its own LLM adapter for potential future
+    AI-assisted pruning decisions.
     """
-
-    def __init__(
-        self, 
-        llm_adapter: LLMAdapter = None
-        ) -> None:
+    
+    def __init__(self, llm_adapter: LLMAdapter) -> None:
         """Initialize the PrunerAgent.
         
         Args:
-            llm_adapter: Optional LLMAdapter for advanced pruning strategies.
-                 If None, uses only deterministic rules.
+            llm_adapter: LLM adapter for potential AI-assisted pruning decisions.
         """
-        self._llm_adapter = llm_adapter
-        self._pruning_operations = 0
-
-    @property
-    def pruning_operations(self) -> int:
-        """Get the number of pruning operations performed."""
-        return self._pruning_operations
-
-    def prune(
-        self, 
-        active_nodes: Set[Node], 
-        question: Question, 
-        answer: Answer
+        self.llm_adapter = llm_adapter
+        self.pruning_count = 0
+    
+    def analyze_and_prune(
+        self,
+        graph_text: str,
+        turn_index: int,
+        question: Question,
+        answer: Answer,
     ) -> PruningResult:
-        """Determine which nodes to prune based on question and answer.
-        
+        """Delegate pruning decision to the LLM using graph text and turn context.
+
+        The LLM must respond with a strict JSON object:
+            {"pruned_ids": ["node:id", ...], "rationale": "..."}
+
         Args:
-            active_nodes: Set of currently active nodes.
-            question: The question that was asked.
-            answer: The Oracle's answer to the question.
-            
+            graph_text: Textual representation of the active graph (graph_to_text).
+            turn_index: Current turn number (1-based).
+            question: Seeker's question.
+            answer: Oracle's answer.
+
         Returns:
-            PruningResult with node IDs to prune and rationale.
-            
-        Raises:
-            ValueError: If inputs are invalid.
+            PruningResult with pruned node IDs and rationale. Falls back to no
+            pruning if parsing fails or the model returns an invalid response.
         """
-        if not active_nodes:
-            raise ValueError("No active nodes to prune")
-        if not question.text:
-            raise ValueError("Question cannot be empty")
-        if not answer.text:
-            raise ValueError("Answer cannot be empty")
-            
-        # Apply deterministic rules
-        pruned_ids = self._apply_deterministic_rules(
-            active_nodes, question.text, answer.text
+        system_prompt = get_pruner_system_prompt()
+
+        user_prompt = (
+            "GRAPH:\n" + graph_text + "\n\n" +
+            f"TURN: {turn_index}\n" +
+            f"QUESTION: {question.text}\n" +
+            f"ANSWER: {answer.text}\n\n" +
+            "Respond with JSON only: {\"pruned_ids\": [...], \"rationale\": \"...\"}"
         )
-        
-        # Generate rationale
-        rationale = self._generate_rationale(question.text, answer.text, len(pruned_ids))
-        
-        # Track usage
-        self._pruning_operations += 1
-        
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            reply = self.llm_adapter.generate(messages=messages, add_to_history=False, temperature=0.0)
+        except Exception as exc:
+            return PruningResult(pruned_ids=set(), rationale=f"LLM error: {exc}")
+
+        parsed = parse_first_json_object(reply)
+        if parsed is None:
+            return PruningResult(pruned_ids=set(), rationale="Invalid LLM response (non-JSON)")
+
+        pruned_ids_list = parsed.get("pruned_ids", [])
+        rationale = parsed.get("rationale", "") or "No rationale provided"
+
+        # Normalize and validate shape
+        if not isinstance(pruned_ids_list, list):
+            pruned_ids_list = []
+        pruned_ids: Set[str] = {str(x) for x in pruned_ids_list if isinstance(x, (str, int))}
+
+        self.pruning_count += len(pruned_ids)
         return PruningResult(pruned_ids=pruned_ids, rationale=rationale)
-
-    def _apply_deterministic_rules(
-        self, 
-        active_nodes: Set[Node], 
-        question_text: str, 
-        answer_text: str
-    ) -> set[str]:
-        """Apply deterministic pruning rules based on question and answer.
         
-        Args:
-            active_nodes: Set of active nodes to consider.
-            question_text: The question that was asked.
-            answer_text: The Oracle's answer.
-            
-        Returns:
-            Set of node IDs to prune.
-        """
-        pruned_ids: set[str] = set()
-        answer_lower = answer_text.lower().strip()
-        question_lower = question_text.lower()
-        
-        # Rule 1: Geographic containment
-        if "in europe" in question_lower:
-            if answer_lower in ("yes", "y"):
-                # Keep only European nodes, prune non-European
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if not self._is_in_region(node, "europe")
-                )
-            elif answer_lower in ("no", "n"):
-                # Keep only non-European nodes, prune European
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if self._is_in_region(node, "europe")
-                )
-        
-        # Rule 2: Capital city status
-        elif "capital" in question_lower:
-            if answer_lower in ("yes", "y"):
-                # Keep only capitals, prune non-capitals
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if not self._is_capital(node)
-                )
-            elif answer_lower in ("no", "n"):
-                # Keep only non-capitals, prune capitals
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if self._is_capital(node)
-                )
-        
-        # Rule 3: Population size (basic heuristic)
-        elif "million" in question_lower and "population" in question_lower:
-            if answer_lower in ("yes", "y"):
-                # Keep only large cities
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if not self._has_large_population(node)
-                )
-            elif answer_lower in ("no", "n"):
-                # Keep only smaller cities
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if self._has_large_population(node)
-                )
-        
-        # Rule 4: Coastal location
-        elif "coastal" in question_lower:
-            if answer_lower in ("yes", "y"):
-                # Keep only coastal nodes
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if not self._is_coastal(node)
-                )
-            elif answer_lower in ("no", "n"):
-                # Keep only inland nodes
-                pruned_ids.update(
-                    node.id for node in active_nodes
-                    if self._is_coastal(node)
-                )
-        
-        return pruned_ids
-
-    def _is_in_region(self, node: Node, region: str) -> bool:
-        """Check if node is in the specified region."""
-        # Basic implementation using node attributes
-        region_lower = region.lower()
-        if "continent" in node.attrs:
-            return node.attrs["continent"].lower() == region_lower
-        # Fallback: check in label
-        return region_lower in node.label.lower()
-
-    def _is_capital(self, node: Node) -> bool:
-        """Check if node is a capital city."""
-        if "is_capital" in node.attrs:
-            return bool(node.attrs["is_capital"])
-        # Fallback: check in label
-        return "capital" in node.label.lower()
-
-    def _has_large_population(self, node: Node) -> bool:
-        """Check if node has large population (>1M)."""
-        if "population" in node.attrs:
-            try:
-                return int(node.attrs["population"]) > 1_000_000
-            except (ValueError, TypeError):
-                pass
-        # Fallback: assume major cities in label
-        major_indicators = ["city", "metropolis", "major"]
-        return any(indicator in node.label.lower() for indicator in major_indicators)
-
-    def _is_coastal(self, node: Node) -> bool:
-        """Check if node is in a coastal location."""
-        if "coastal" in node.attrs:
-            return bool(node.attrs["coastal"])
-        # Fallback: check in label
-        coastal_indicators = ["port", "harbor", "coast", "sea"]
-        return any(indicator in node.label.lower() for indicator in coastal_indicators)
-
-    def _generate_rationale(self, question: str, answer: str, pruned_count: int) -> str:
-        """Generate human-readable rationale for the pruning decision.
-        
-        Args:
-            question: The question that was asked.
-            answer: The Oracle's answer.
-            pruned_count: Number of nodes pruned.
-            
-        Returns:
-            Human-readable rationale string.
-        """
-        if pruned_count == 0:
-            return f"No nodes to prune. Question '{question}' with answer '{answer}' did not match any pruning rules."
-        
-        return f"Pruned {pruned_count} nodes based on question '{question}' with answer '{answer}' using deterministic rules."
-
-
