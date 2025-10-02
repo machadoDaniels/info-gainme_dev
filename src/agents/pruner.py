@@ -70,10 +70,7 @@ class PrunerAgent:
             {"role": "user", "content": user_prompt},
         ]
 
-        try:
-            reply = self.llm_adapter.generate(messages=messages, add_to_history=False, temperature=0.0)
-        except Exception as exc:
-            return PruningResult(pruned_ids=set(), rationale=f"LLM error: {exc}")
+        reply = self.llm_adapter.generate(messages=messages, add_to_history=False, temperature=0.0)
 
         parsed = parse_first_json_object(reply)
         if parsed is None:

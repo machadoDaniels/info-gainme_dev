@@ -114,6 +114,25 @@ class LLMAdapter:
         """Return the underlying configuration."""
         return self._config
 
+    @staticmethod
+    def see_messages(messages: list[dict[str, str]]) -> str:
+        """Return the messages as a string pretty-printed."""
+        lines = []
+        for i, msg in enumerate(messages, 1):
+            role = msg["role"].upper()
+            content = msg["content"]
+            lines.append(f"{i:2d}. {role}: {content}")
+        
+        return "\n".join(lines)
+        
+    def see_history(self) -> str:
+        """Return the internal history as a string pretty-printed."""
+        if not self._save_history or not self._history:
+            return "No history available."
+        
+        return self.see_messages(self._history)
+
+
     # --- Core generation ---
     def generate(
         self,

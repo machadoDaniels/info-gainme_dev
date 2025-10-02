@@ -49,6 +49,7 @@ class SeekerAgent:
         self._llm_adapter = llm_adapter
         self._observability_mode = observability_mode
         self._questions_asked = 0
+        self._initial_graph_injected: bool = False
         
         # Initialize conversation with system prompt
         self._llm_adapter.append_history("system", get_seeker_system_prompt())
@@ -77,14 +78,14 @@ class SeekerAgent:
         return self.observability_mode
 
     def question_to_oracle(
-        self, 
+        self,
         active_nodes: Set[Node],
-        turn: int) -> Question:
+        turn: int,
+        ) -> Question:
         """Generate a strategic question to ask the Oracle.
         
         Args:
             active_nodes: Set of nodes that haven't been pruned yet.
-            turn: Current turn number (1-indexed).
             
         Returns:
             A Question object containing the generated question text.
@@ -92,9 +93,6 @@ class SeekerAgent:
         Raises:
             ValueError: If active_nodes is empty.
         """
-        if not active_nodes:
-            raise ValueError("Cannot ask questions with no active nodes")
-            
         # Generate question
         question_text = self._llm_adapter.generate(max_tokens=100, temperature=0.7)
         
@@ -109,8 +107,8 @@ class SeekerAgent:
     def add_oracle_answer_and_pruning(
         self, 
         answer: Answer,
-        active_nodes: Set[Node],
-        turn: int
+        graph_text: Optional[str],
+        turn: int,
         ) -> None:
         """Add Oracle's answer to the conversation history and pruning result.
 
@@ -124,7 +122,7 @@ class SeekerAgent:
         """
         user_answer = f"""[Oracle] - {answer.text}"""
 
-        context = self._build_context(active_nodes, turn)
+        context = self._build_context(graph_text, turn)
 
         if context:
             user_answer += f"\n[Computer] - {context}"
@@ -132,7 +130,25 @@ class SeekerAgent:
         # Add Oracle's answer as user message (Seeker's perspective: Oracle is user)
         self._llm_adapter.append_history("user", user_answer)
     
-    def _build_context(self, active_nodes: Set[Node], turn: int) -> str:
+    def add_initial_graph(self, graph_text: str, turn: int) -> None:
+        """Inject the initial graph into the system prompt once when fully observed.
+
+        Args:
+            graph_text: Textual representation of the knowledge graph.
+
+        Returns:
+            None
+        """
+        if self._observability_mode != ObservabilityMode.FULLY_OBSERVED:
+            return
+        if not graph_text or self._initial_graph_injected:
+            return
+
+        context = self._build_context(graph_text, turn)
+        self._llm_adapter.append_history("user", f"[Computer] - {context}")
+        self._initial_graph_injected = True
+
+    def _build_context(self, graph_text: Optional[str], turn: int) -> Optional[str]:
         """Build context prompt based on observability mode and current state.
         
         Args:
@@ -142,20 +158,10 @@ class SeekerAgent:
         Returns:
             Formatted context string for the LLM.
         """
-        node_count = len(active_nodes)
-        
         if self.observability_mode == ObservabilityMode.FULLY_OBSERVED:
-            # Show all node details
-            node_list = []
-            for node in sorted(active_nodes, key=lambda n: n.id):
-                attrs_str = ""
-                if node.attrs:
-                    attrs_str = f" ({', '.join(f'{k}={v}' for k, v in node.attrs.items())})"
-                node_list.append(f"- {node.id}: {node.label}{attrs_str}")
-            
-            nodes_info = "\n".join(node_list)
-            
-            return f"""Remaining nodes: {nodes_info}"""
+            assert graph_text is not None, "graph_text cannot be None when observability mode is FULLY_OBSERVED"
+            # Provide full graph textual view instead of listing nodes
+            return graph_text
 
         elif self.observability_mode == ObservabilityMode.PARTIALLY_OBSERVED:
             # Show only basic stats

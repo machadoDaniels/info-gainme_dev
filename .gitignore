@@ -27,3 +27,7 @@ deprecated/
 
 .conda/
 .cursor/
+
+project/
+
+outputs/
