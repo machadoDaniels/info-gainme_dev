@@ -17,14 +17,17 @@ from src.domain.geo.loader import load_geo_graph
 from src.benchmark_config import BenchmarkConfig
 from pathlib import Path
 from random import choice
-
+import os
 
 OPENAI_API_KEY = getenv("OPENAI_API_KEY")
-OBSERVABILITY_MODE = ObservabilityMode.PARTIALLY_OBSERVED
+OBSERVABILITY_MODE = ObservabilityMode.PARTIALLY_OBSERVABLE
 MAX_TURNS = 15
 CSV_PATH = Path("data/top_10_pop_cities.csv")
-OUTPUT_PATH = Path("output/sample_graph.png")
+OUTPUT_PATH = Path("outputs")
+OUTPUT_GRAPH_PATH = OUTPUT_PATH / "sample_graph.png"
 MODEL = "gpt-4o-mini"
+
+os.makedirs(OUTPUT_PATH, exist_ok=True)
 
 
 def main() -> None:
@@ -44,7 +47,7 @@ def main() -> None:
         attrs_str = ", ".join(f"{k}={v}" for k, v in node.attrs.items())
         print(f"   - {node.id}: {node.label} ({attrs_str})")
 
-    graph.plot(output_path=OUTPUT_PATH)
+    graph.plot(output_path=OUTPUT_GRAPH_PATH)
 
     # Set up configuration
     llm_config = LLMConfig(model=MODEL, api_key=OPENAI_API_KEY)

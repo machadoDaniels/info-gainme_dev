@@ -94,6 +94,9 @@ class BenchmarkRunner:
             if debug:
                 print(f"Running target: {target.label} - {target.id}")
             for run_idx in range(1, int(runs_per_target) + 1):
+                # Reset graph pruning state before each game
+                graph.reset_pruning()
+                
                 # Create a fresh orchestrator for each game
                 orch = Orchestrator.from_target(
                     target_node=target,

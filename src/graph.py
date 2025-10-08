@@ -74,6 +74,13 @@ class KnowledgeGraph:
         if not pruned:
             return
         self.pruned_ids.update(pruned)
+    
+    def reset_pruning(self) -> None:
+        """Reset the pruning state, making all nodes active again.
+        
+        This is useful when reusing the same graph for multiple benchmark runs.
+        """
+        self.pruned_ids.clear()
 
     def graph_to_text(self) -> str:
         """Convert the active portion of the graph into a compact text format.
