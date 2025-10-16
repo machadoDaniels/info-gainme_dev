@@ -16,7 +16,7 @@ class BenchmarkConfig:
     oracle_config: LLMConfig
     pruner_config: LLMConfig
 
-    observability_mode: ObservabilityMode = ObservabilityMode.FULLY_OBSERVED
+    observability_mode: ObservabilityMode = ObservabilityMode.FULLY_OBSERVABLE
     max_turns: int = 40
 
     # Optional experiment metadata

@@ -12,8 +12,8 @@ import json
 
 
 class ObservabilityMode(Enum):
-    FULLY_OBSERVED = "FO"
-    PARTIALLY_OBSERVED = "PO"
+    FULLY_OBSERVABLE = "FO"
+    PARTIALLY_OBSERVABLE = "PO"
 
 
 @dataclass

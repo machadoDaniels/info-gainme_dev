@@ -81,7 +81,7 @@ class Orchestrator:
         seeker_config: LLMConfig,
         oracle_config: LLMConfig,
         pruner_config: LLMConfig,
-        observability_mode: ObservabilityMode = ObservabilityMode.FULLY_OBSERVED,
+        observability_mode: ObservabilityMode = ObservabilityMode.FULLY_OBSERVABLE,
         max_turns: int = 40,
     ) -> Orchestrator:
         """Factory method to create an Orchestrator with all agents configured.
@@ -105,7 +105,7 @@ class Orchestrator:
                 seeker_config=LLMConfig(model="gpt-4o-mini"),
                 oracle_config=LLMConfig(model="gpt-4o-mini"),
                 pruner_config=LLMConfig(model="gpt-4o-mini"),
-                observability_mode=ObservabilityMode.FULLY_OBSERVED,
+                observability_mode=ObservabilityMode.FULLY_OBSERVABLE,
                 max_turns=15
             )
             orch.run(debug=True)
@@ -208,7 +208,7 @@ class Orchestrator:
 
             # Prepare textual graph view and inject once if fully observed
             graph_text = self._graph.graph_to_text()
-            if turn == 1 and self._seeker.observability_mode.name == "FULLY_OBSERVED":
+            if turn == 1 and self._seeker.observability_mode.name == "FULLY_OBSERVABLE":
                 self._seeker.add_initial_graph(graph_text, turn)
             
             # Save plot before pruning if requested
@@ -246,7 +246,7 @@ class Orchestrator:
             # Seeker integrates the oracle's answer and (optionally) context from graph text
             self._seeker.add_oracle_answer_and_pruning(
                 answer,
-                graph_text=graph_text if self._seeker.observability_mode.name == "FULLY_OBSERVED" else None,
+                graph_text=graph_text if self._seeker.observability_mode.name == "FULLY_OBSERVABLE" else None,
                 turn=turn,
             )
 

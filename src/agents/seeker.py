@@ -1,8 +1,8 @@
 """SeekerAgent implementation for proactive information gathering.
 
 The SeekerAgent asks strategic questions to reduce uncertainty in the knowledge
-graph, operating under different observability modes (FULLY_OBSERVED, 
-PARTIALLY_OBSERVED, AUTO).
+graph, operating under different observability modes (FULLY_OBSERVABLE, 
+PARTIALLY_OBSERVABLE, AUTO).
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ class SeekerAgent:
         """Return the current observability mode.
         
         Returns:
-            The configured observability mode (FULLY_OBSERVED or PARTIALLY_OBSERVED).
+            The configured observability mode (FULLY_OBSERVABLE or PARTIALLY_OBSERVABLE).
         """
         return self.observability_mode
 
@@ -139,7 +139,7 @@ class SeekerAgent:
         Returns:
             None
         """
-        if self._observability_mode != ObservabilityMode.FULLY_OBSERVED:
+        if self._observability_mode != ObservabilityMode.FULLY_OBSERVABLE:
             return
         if not graph_text or self._initial_graph_injected:
             return
@@ -158,12 +158,12 @@ class SeekerAgent:
         Returns:
             Formatted context string for the LLM.
         """
-        if self.observability_mode == ObservabilityMode.FULLY_OBSERVED:
-            assert graph_text is not None, "graph_text cannot be None when observability mode is FULLY_OBSERVED"
+        if self.observability_mode == ObservabilityMode.FULLY_OBSERVABLE:
+            assert graph_text is not None, "graph_text cannot be None when observability mode is FULLY_OBSERVABLE"
             # Provide full graph textual view instead of listing nodes
             return graph_text
 
-        elif self.observability_mode == ObservabilityMode.PARTIALLY_OBSERVED:
+        elif self.observability_mode == ObservabilityMode.PARTIALLY_OBSERVABLE:
             # Show only basic stats
             return None
 
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     )
     
     llm_adapter = LLMAdapter(config)
-    seeker = SeekerAgent(llm_adapter, ObservabilityMode.PARTIALLY_OBSERVED)
+    seeker = SeekerAgent(llm_adapter, ObservabilityMode.PARTIALLY_OBSERVABLE)
     
     # Simulate some active nodes (without actual graph)
     fake_nodes = {
