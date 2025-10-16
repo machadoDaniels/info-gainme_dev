@@ -254,7 +254,13 @@ class Orchestrator:
             active_nodes_after = len(self._graph.get_active_nodes())
             active_leaf_nodes_after = self._graph.get_active_leaf_nodes()
             active_leaf_nodes_after_count = len(active_leaf_nodes_after)
-            h_after = self._entropy.compute(active_leaf_nodes_after)
+            
+            # If game is won, entropy should be 0 (target found, no uncertainty)
+            if answer.game_over:
+                h_after = 0.0
+            else:
+                h_after = self._entropy.compute(active_leaf_nodes_after)
+                
             info_gain = self._entropy.info_gain(h_before, h_after)
             
             # End timestamp
@@ -300,17 +306,22 @@ class Orchestrator:
             print(f"📈 Start Entropy: {summary['h_start']:.4f}")
             print(f"📉 End Entropy: {summary['h_end']:.4f}")
             print(f"🎯 Total Info Gain: {summary['total_info_gain']:.4f}")
+            print(f"📊 Avg Info Gain/Turn: {summary['avg_info_gain_per_turn']:.4f}")
             print("=" * 50)
 
 
     def get_summary(self) -> dict:
         """Return a simple summary of the run."""
+        total_info_gain = sum(t.info_gain for t in self._turns)
+        num_turns = len(self._turns)
+        
         return {
-            "turns": len(self._turns),
+            "turns": num_turns,
             "current_turn": self._current_turn,
             "h_start": self._turns[0].h_before if self._turns else None,
             "h_end": self._turns[-1].h_after if self._turns else None,
-            "total_info_gain": sum(t.info_gain for t in self._turns),
+            "total_info_gain": total_info_gain,
+            "avg_info_gain_per_turn": total_info_gain / num_turns if num_turns > 0 else 0.0,
         }
     
     def export_conversation(self, output_dir: Path) -> None:
@@ -372,7 +383,7 @@ class Orchestrator:
                 "base_url": self._pruner.llm_adapter.config.base_url,
             },
             "save_history": self._pruner.llm_adapter._save_history,
-            "total_calls": len(self._turns),
+            "total_calls": len(self.turns),
         }
         
         if self._pruner.llm_adapter._save_history:
@@ -387,10 +398,10 @@ class Orchestrator:
         
         # 4. Save metadata
         summary = self.get_summary()
-        win = any(t.answer.game_over for t in self._turns)
+        win = any(t.answer.game_over for t in self.turns)
         compliance_rate = (
-            sum(1 for t in self._turns if t.answer.compliant) / len(self._turns)
-        ) if self._turns else 0.0
+            sum(1 for t in self.turns if t.answer.compliant) / len(self.turns)
+        ) if self.turns else 0.0
         
         total_pruned = sum(t.pruned_count for t in self._turns)
         initial_nodes = len(self._graph.nodes)
@@ -415,11 +426,12 @@ class Orchestrator:
                 }
             },
             "results": {
-                "turns_played": len(self._turns),
+                "turns_played": len(self.turns),
                 "win": win,
                 "h_start": summary["h_start"],
                 "h_end": summary["h_end"],
                 "total_info_gain": summary["total_info_gain"],
+                "avg_info_gain_per_turn": summary["avg_info_gain_per_turn"],
                 "compliance_rate": round(compliance_rate, 4),
                 "final_active_nodes": final_active
             },
@@ -436,48 +448,8 @@ class Orchestrator:
         
         # 5. Save turn-by-turn details in JSONL format
         with (output_dir / "turns.jsonl").open("w", encoding="utf-8") as f:
-            for turn_state in self._turns:
-                # Parse answer rationale from JSON if Oracle returned JSON
-                answer_rationale = None
-                try:
-                    if turn_state.answer.text.strip().startswith("{"):
-                        answer_json = json.loads(turn_state.answer.text)
-                        answer_rationale = answer_json.get("rationale", None)
-                except:
-                    pass
-                
-                turn_data = {
-                    "turn_index": turn_state.turn_index,
-                    "h_before": round(turn_state.h_before, 4),
-                    "h_after": round(turn_state.h_after, 4),
-                    "info_gain": round(turn_state.info_gain, 4),
-                    "pruned_count": turn_state.pruned_count,
-                    "graph_state": {
-                        "active_nodes_before": turn_state.active_nodes_before,
-                        "active_nodes_after": turn_state.active_nodes_after,
-                        "active_cities_before": turn_state.active_leaf_nodes_before,
-                        "active_cities_after": turn_state.active_leaf_nodes_after,
-                        "cities_pruned": turn_state.active_leaf_nodes_before - turn_state.active_leaf_nodes_after if turn_state.active_leaf_nodes_before and turn_state.active_leaf_nodes_after else 0
-                    },
-                    "question": {
-                        "text": turn_state.question.text
-                    },
-                    "answer": {
-                        "text": turn_state.answer.text,
-                        "compliant": turn_state.answer.compliant,
-                        "game_over": turn_state.answer.game_over,
-                        "rationale": answer_rationale
-                    },
-                    "pruning": {
-                        "pruned_ids": list(turn_state.pruning_result.pruned_ids) if turn_state.pruning_result else [],
-                        "rationale": turn_state.pruning_result.rationale if turn_state.pruning_result else None
-                    },
-                    "timestamp_start": turn_state.timestamp_start,
-                    "timestamp_end": turn_state.timestamp_end,
-                    "duration_seconds": turn_state.duration_seconds
-                }
-                
-                # Write as single line (JSONL format)
+            for turn_state in self.turns:
+                turn_data = turn_state.to_export_dict()
                 f.write(json.dumps(turn_data, ensure_ascii=False) + "\n")
     
 

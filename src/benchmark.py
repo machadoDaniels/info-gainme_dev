@@ -69,6 +69,7 @@ class BenchmarkRunner:
                     "h_start",
                     "h_end",
                     "total_info_gain",
+                    "avg_info_gain_per_turn",
                     "win",
                     "compliance_rate",
                     "conversation_path",
@@ -130,6 +131,12 @@ class BenchmarkRunner:
 
         for target in targets:
             for run_idx in range(1, int(runs_per_target) + 1):
+                # Create descriptive directory name
+                safe_label = target.label.replace(" ", "_").replace("/", "-")
+                safe_id = target.id.replace(":", "")
+                conv_dir = self._output_dir() / "conversations" / \
+                            f"game_{game_counter:03d}_{safe_label}_{safe_id}"
+
                 total_planned += 1
                 
                 # Check if this run is already completed
@@ -159,17 +166,13 @@ class BenchmarkRunner:
                 orch.run(
                     debug=debug, 
                     save_plots=self.config.save_graph_plots,
-                    plots_dir=self._output_dir() / "plots"
+                    plots_dir=conv_dir / "plots"
                     )
 
                 # Save conversation if enabled
                 conv_path_str = ""
                 if self.config.save_conversations:
-                    # Create descriptive directory name
-                    safe_label = target.label.replace(" ", "_").replace("/", "-")
-                    safe_id = target.id.replace(":", "")
-                    conv_dir = self._output_dir() / "conversations" / \
-                              f"game_{game_counter:03d}_{safe_label}_{safe_id}"
+                    
                     
                     # Export conversation
                     orch.export_conversation(conv_dir)
@@ -211,6 +214,7 @@ class BenchmarkRunner:
                             summary.get("h_start"),
                             summary.get("h_end"),
                             summary.get("total_info_gain"),
+                            summary.get("avg_info_gain_per_turn"),
                             int(win),
                             round(compliance_rate, 4),
                             conv_path_str,

@@ -30,7 +30,7 @@ PRUNER_MODEL = "gpt-4o-mini"
 PRUNER_BASE_URL = None
 
 OBSERVABILITY_MODE = ObservabilityMode.PARTIALLY_OBSERVED
-MAX_TURNS = 30
+MAX_TURNS = 15
 
 # Dataset and targets
 CSV_PATH = Path("data/top_10_pop_cities.csv")

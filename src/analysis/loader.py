@@ -52,6 +52,7 @@ def load_experiment_results(csv_path: Path) -> ExperimentResults:
             h_start=float(row["h_start"]),
             h_end=float(row["h_end"]),
             total_info_gain=float(row["total_info_gain"]),
+            avg_info_gain_per_turn=float(row.get("avg_info_gain_per_turn", 0.0)),
             win=bool(int(row["win"])),
             compliance_rate=float(row["compliance_rate"]),
             conversation_path=row.get("conversation_path") or None,

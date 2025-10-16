@@ -57,6 +57,7 @@ def main():
     print(f"📁 Total de runs: {results.total_runs}")
     print(f"🏙️  Total de cidades: {len(results.cities)}")
     print(f"📈 Ganho de informação médio: {results.mean_info_gain:.4f}")
+    print(f"📊 GI médio por turno: {results.mean_avg_info_gain_per_turn:.4f}")
     print(f"🏆 Win rate global: {results.global_win_rate:.2%}")
     print(f"🔄 Média de turnos: {results.mean_turns:.2f}")
     print(f"✅ Compliance médio: {results.mean_compliance:.2%}")
@@ -70,6 +71,7 @@ def main():
         print(f"   📊 Runs: {city.num_runs}")
         print(f"   📈 Ganho médio: {city.mean_info_gain:.4f} ± {city.std_info_gain:.4f}")
         print(f"   📉 Variância: {city.var_info_gain:.4f}")
+        print(f"   📊 GI médio/turno: {city.mean_avg_info_gain_per_turn:.4f} ± {city.std_avg_info_gain_per_turn:.4f}")
         print(f"   🏆 Win rate: {city.win_rate:.2%}")
         print(f"   🔄 Turnos médios: {city.mean_turns:.2f} ± {city.std_turns:.2f}")
     
