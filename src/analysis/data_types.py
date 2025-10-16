@@ -16,6 +16,7 @@ class GameRun:
         h_start: Entropia inicial
         h_end: Entropia final
         total_info_gain: Ganho total de informação
+        avg_info_gain_per_turn: Ganho de informação médio por turno
         win: Se o seeker venceu
         compliance_rate: Taxa de compliance do oracle
         conversation_path: Caminho relativo para conversas salvas
@@ -27,6 +28,7 @@ class GameRun:
     h_start: float
     h_end: float
     total_info_gain: float
+    avg_info_gain_per_turn: float
     win: bool
     compliance_rate: float
     conversation_path: Optional[str] = None
@@ -92,6 +94,22 @@ class CityStats:
         mean = self.mean_turns
         variance = sum((r.turns - mean) ** 2 for r in self.runs) / self.num_runs
         return variance ** 0.5
+    
+    @property
+    def mean_avg_info_gain_per_turn(self) -> float:
+        """Média do ganho de informação médio por turno."""
+        if not self.runs:
+            return 0.0
+        return sum(r.avg_info_gain_per_turn for r in self.runs) / self.num_runs
+    
+    @property
+    def std_avg_info_gain_per_turn(self) -> float:
+        """Desvio padrão do ganho de informação médio por turno."""
+        if not self.runs:
+            return 0.0
+        mean = self.mean_avg_info_gain_per_turn
+        variance = sum((r.avg_info_gain_per_turn - mean) ** 2 for r in self.runs) / self.num_runs
+        return variance ** 0.5
 
 
 @dataclass
@@ -151,6 +169,14 @@ class ExperimentResults:
         total_compliance = sum(sum(r.compliance_rate for r in city.runs) for city in self.cities.values())
         return total_compliance / self.total_runs
     
+    @property
+    def mean_avg_info_gain_per_turn(self) -> float:
+        """Ganho de informação médio por turno global."""
+        if self.total_runs == 0:
+            return 0.0
+        total_avg_gi = sum(sum(r.avg_info_gain_per_turn for r in city.runs) for city in self.cities.values())
+        return total_avg_gi / self.total_runs
+    
     def get_city(self, city_id: str) -> Optional[CityStats]:
         """Retorna estatísticas de uma cidade específica."""
         return self.cities.get(city_id)
@@ -172,6 +198,7 @@ class ExperimentResults:
                 "total_runs": self.total_runs,
                 "total_cities": len(self.cities),
                 "mean_info_gain": round(self.mean_info_gain, 4),
+                "mean_avg_info_gain_per_turn": round(self.mean_avg_info_gain_per_turn, 4),
                 "win_rate": round(self.global_win_rate, 4),
                 "mean_turns": round(self.mean_turns, 2),
                 "mean_compliance": round(self.mean_compliance, 4),
@@ -183,6 +210,8 @@ class ExperimentResults:
                     "mean_info_gain": round(city.mean_info_gain, 4),
                     "std_info_gain": round(city.std_info_gain, 4),
                     "var_info_gain": round(city.var_info_gain, 4),
+                    "mean_avg_info_gain_per_turn": round(city.mean_avg_info_gain_per_turn, 4),
+                    "std_avg_info_gain_per_turn": round(city.std_avg_info_gain_per_turn, 4),
                     "win_rate": round(city.win_rate, 4),
                     "mean_turns": round(city.mean_turns, 2),
                     "std_turns": round(city.std_turns, 2),

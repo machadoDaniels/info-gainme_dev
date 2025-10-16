@@ -5,9 +5,10 @@ Provides `TurnState`, `PruningResult`, and enums per UML.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
+import json
 
 
 class ObservabilityMode(Enum):
@@ -22,9 +23,11 @@ class Question:
 
 @dataclass
 class Answer:
+    rationale: str = ""
     text: str
     compliant: bool
     game_over: bool = False
+    
 
 
 @dataclass
@@ -53,5 +56,22 @@ class TurnState:
     timestamp_end: Optional[str] = None
     duration_seconds: Optional[float] = None
     graph_snapshot: Optional[str] = None
+    
+    def to_export_dict(self) -> dict[str, Any]:
+        """Convert TurnState to dictionary for JSONL export.
+        
+        Uses dataclasses.asdict() to preserve all attributes, then converts
+        sets to lists for JSON serialization.
+        
+        Returns:
+            Dictionary with all turn data ready for JSON export.
+        """
+        data = asdict(self)
+        
+        # Convert pruning_result.pruned_ids from set to list for JSON serialization
+        if data.get("pruning_result") and "pruned_ids" in data["pruning_result"]:
+            data["pruning_result"]["pruned_ids"] = list(data["pruning_result"]["pruned_ids"])
+        
+        return data
 
 

@@ -104,7 +104,7 @@ class OracleAgent:
             # Extract fields (rationale is for internal use, not returned to Seeker)
             answer_text = str(parsed.get("answer", raw_response.strip()))
             game_over = bool(parsed.get("game_over", False))
-            # rationale = parsed.get("rationale", "")  # Available for future logging
+            rationale = parsed.get("rationale", "")  # Available for future logging
         
         # Check compliance
         is_compliant = self._check_compliance(answer_text)
@@ -112,7 +112,7 @@ class OracleAgent:
         # Track usage
         self._answers_given += 1
         
-        return Answer(text=answer_text, compliant=is_compliant, game_over=game_over)
+        return Answer(text=answer_text, compliant=is_compliant, game_over=game_over, rationale=rationale)
 
     def _build_system_prompt_with_target(self, target_node: Node) -> str:
         """Build system prompt with target information included.
