@@ -20,7 +20,7 @@ from src.analysis.writer import save_summary, save_city_variance
 def main():
     """Main entry point for results analysis."""
     # Default: analisar último experimento conhecido
-    default_csv = Path("outputs/models/gpt-4o-mini__gpt-4o-mini__gpt-4o-mini/top10_test/runs.csv")
+    default_csv = Path("/Users/daniel2/Documents/AKCIT-RL/clary_quest/outputs/models/s_qwen3-8b__o_gpt-4o-mini__p_gpt-4o-mini/top40_po/runs.csv")
     
     # Permitir especificar CSV via argumento
     if len(sys.argv) > 1:

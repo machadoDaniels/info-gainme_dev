@@ -23,12 +23,12 @@ class Question:
 
 @dataclass
 class Answer:
-    rationale: str = ""
+    rationale: str
     text: str
     compliant: bool
     game_over: bool = False
     
-
+    
 
 @dataclass
 class PruningResult:

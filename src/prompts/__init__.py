@@ -60,6 +60,11 @@ def get_pruner_system_prompt() -> str:
     return load_prompt("pruner_system")
 
 
+def get_reasoning_synthesis_prompt() -> str:
+    """Get the reasoning synthesis system prompt."""
+    return load_prompt("reasoning_synthesis")
+
+
 def clear_cache() -> None:
     """Clear the prompt cache. Useful for testing or reloading prompts."""
     _PROMPT_CACHE.clear()
@@ -70,6 +75,7 @@ __all__ = [
     "get_seeker_system_prompt", 
     "get_oracle_system_prompt",
     "get_pruner_system_prompt",
+    "get_reasoning_synthesis_prompt",
     "clear_cache",
 ]
 
