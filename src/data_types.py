@@ -5,9 +5,11 @@ Provides `TurnState`, `PruningResult`, and enums per UML.
 
 from __future__ import annotations
 
+from ast import List
 from dataclasses import dataclass, asdict
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional, Any, List
+from pydantic import BaseModel
 import json
 
 
@@ -15,11 +17,15 @@ class ObservabilityMode(Enum):
     FULLY_OBSERVABLE = "FO"
     PARTIALLY_OBSERVABLE = "PO"
 
-
 @dataclass
 class Question:
     text: str
 
+
+class OracleResponse(BaseModel):
+    rationale: str
+    answer: str
+    game_over: bool
 
 @dataclass
 class Answer:
@@ -27,8 +33,11 @@ class Answer:
     text: str
     compliant: bool
     game_over: bool = False
-    
-    
+
+
+class PrunerResponse(BaseModel):
+    pruned_ids: List[str]
+    rationale: str
 
 @dataclass
 class PruningResult:
