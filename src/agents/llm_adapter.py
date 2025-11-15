@@ -14,42 +14,17 @@ No side effects occur on import. The OpenAI client is imported lazily at call ti
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import time
-from ..utils.utils import clean_llm_response
+from .llm_config import LLMConfig
+from ..utils.utils import llm_final_content
 
 load_dotenv()
 
 Role = Literal["system", "user", "assistant"]
-
-@dataclass(slots=True)
-class LLMConfig:
-    """Configuration for `LLMAdapter`.
-
-    Args:
-        model: Model name (e.g., "gpt-4o-mini" or a vLLM-exposed model).
-        api_key: API key to authenticate. If None, the OpenAI client will
-            fallback to environment configuration.
-        base_url: Optional custom base URL (e.g., vLLM OpenAI-compatible endpoint).
-        timeout: Request timeout in seconds.
-        max_tokens: Optional cap for tokens in the response.
-        temperature: Sampling temperature.
-        user: Optional user identifier for tracking/auditing.
-        extra: Extra provider-specific parameters to pass through.
-    """
-
-    model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    timeout: float = 60.0
-    max_tokens: Optional[int] = None
-    temperature: float = 0.2
-    user: Optional[str] = None
-    extra: dict[str, Any] = field(default_factory=dict)
 
 
 class LLMAdapterError(RuntimeError):
@@ -75,13 +50,13 @@ class LLMAdapter:
         self, 
         config: Optional[LLMConfig] = None,
         save_history: bool = True,
-        save_reasoning: bool = False
+        save_reasoning: bool = False,
         ) -> None:
         self._config: LLMConfig = config
         self._history: list[dict[str, str]] = [] if save_history else None
         self._save_history = save_history
         self._save_reasoning = save_reasoning
-        
+        self._use_reasoning = self._config.use_reasoning
         # Separate storage for raw responses with reasoning (for export only)
         self._reasoning_history: list[dict[str, str]] = [] if save_reasoning else None
 
@@ -163,8 +138,8 @@ class LLMAdapter:
         stateless: bool = False,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        extra: Optional[dict[str, Any]] = None,
-        save_reasoning: bool = False,
+        response_format: Optional[dict[str, Any]] = None,
+        # extra: Optional[dict[str, Any]] = None
     ) -> str:
         """Call the provider to generate the next assistant message.
 
@@ -175,6 +150,7 @@ class LLMAdapter:
                       Useful for agents that need history export but stateless inference.
             temperature: Optional override for sampling temperature.
             max_tokens: Optional override for max tokens.
+            response_format: Optional override for response format (e.g., {"type": "json_object"}).
             extra: Optional dict of provider-specific parameters.
 
         Returns:
@@ -198,7 +174,7 @@ class LLMAdapter:
             payload_messages = messages
         else:
             # Normal mode: use messages if provided, otherwise use history
-            payload_messages = messages if messages is not None else self._history
+            payload_messages = messages if messages is not None else self.reasoning_history if self._use_reasoning else self._history
         
         if not payload_messages:
             raise ValueError("No messages to send. Provide `messages` or add history.")
@@ -214,17 +190,25 @@ class LLMAdapter:
         request_kwargs: dict[str, Any] = {
             "model": self._config.model,
             "messages": payload_messages,
-            "temperature": self._config.temperature if temperature is None else temperature,
             "timeout": self._config.timeout,
         }
+        
+        # Only add temperature if explicitly set (allows model to use generation_config default)
+        if temperature is not None:
+            request_kwargs["temperature"] = temperature
         if self._config.user is not None:
             request_kwargs["user"] = self._config.user
         if self._config.max_tokens is not None or max_tokens is not None:
             request_kwargs["max_tokens"] = self._config.max_tokens if max_tokens is None else max_tokens
+        if self._config.response_format is not None or response_format is not None:
+            pass
+            # request_kwargs["response_format"] = self._config.response_format if response_format is None else response_format
         if self._config.extra:
             request_kwargs.update(self._config.extra)
-        if extra:
-            request_kwargs.update(extra)
+        # if extra:
+        #     print(f"Extra parameters: {extra}")
+        #     for key, value in extra.items():
+        #         request_kwargs[key] = value
 
         # Special handling for gpt-5 models
         if self._config.model.startswith("gpt-5"):
@@ -251,6 +235,17 @@ class LLMAdapter:
         for attempt in range(max_retries):
             try:
                 completion = client.chat.completions.create(**request_kwargs)
+
+                # Grantee that the raw content is not empty
+                raw_content = completion.choices[0].message.content or ""
+                if not raw_content:
+                    raise LLMAdapterError("Empty response from provider.")
+                
+                # Clean content for return
+                final_content = llm_final_content(raw_content)
+                if not final_content:
+                    raise LLMAdapterError("Response not in the expected format.")
+
                 break  # Success, exit retry loop
             except Exception as exc:
                 if attempt < max_retries - 1:
@@ -263,29 +258,20 @@ class LLMAdapter:
                     # Final attempt failed
                     raise LLMAdapterError(f"Provider error after {max_retries} attempts: {exc}") from exc
 
-        try:
-            raw_content = completion.choices[0].message.content or ""
-        except Exception as exc:  # pragma: no cover - schema guard
-            raise LLMAdapterError("Malformed response from provider.") from exc
 
-
-        # Clean content for return and manage dual history
-        cleaned_content = clean_llm_response(raw_content) if self._config.model.lower().startswith("qwen") else raw_content
-        
         # Save to appropriate histories
-        if add_to_history and cleaned_content:
+        if add_to_history and final_content:
             # Main history: always cleaned (used as input for next turns)
-            self._history.append({"role": "assistant", "content": cleaned_content})
+            self._history.append({"role": "assistant", "content": final_content})
         
         if self._save_reasoning and raw_content:
             # Reasoning history: always raw (used for export/analysis only)
             self._reasoning_history.append({"role": "assistant", "content": raw_content})
         
-        return cleaned_content
+        return final_content
 
 
 __all__ = [
-    "LLMConfig",
     "LLMAdapter",
     "LLMAdapterError",
 ]
