@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Set
 
-from ..data_types import Answer, PruningResult, Question
+from ..data_types import Answer, PruningResult, Question, PrunerResponse
 from ..graph import Node
 from .llm_adapter import LLMAdapter
 from ..prompts import get_pruner_system_prompt
@@ -94,21 +94,20 @@ class PrunerAgent:
         reply = self.llm_adapter.generate(
             messages=messages, 
             stateless=True,  # Use only these messages, not history
-            temperature=0.0
+            # temperature=0.0,
             # add_to_history=True is default, so response is auto-saved
         )
-
-        parsed = parse_first_json_object(reply)
-        if parsed is None:
+        try:
+            pruning_response = PrunerResponse.model_validate_json(reply)
+        except Exception as e:
+            raise ValueError(f"Invalid LLM response (non-JSON): {e}. Response: {reply}")
+            
+        if pruning_response is None:
             return PruningResult(pruned_ids=set(), rationale="Invalid LLM response (non-JSON)")
-
-        pruned_ids_list = parsed.get("pruned_ids", [])
-        rationale = parsed.get("rationale", "") or "No rationale provided"
-
-        # Normalize and validate shape
-        if not isinstance(pruned_ids_list, list):
-            pruned_ids_list = []
         
+        pruned_ids_list = pruning_response.pruned_ids
+        rationale = pruning_response.rationale
+
         # Filter to only include CITY nodes (targets can only be cities)
         candidate_ids = {str(x) for x in pruned_ids_list if isinstance(x, (str, int))}
         city_ids = {node_id for node_id in candidate_ids if node_id.startswith("city:")}

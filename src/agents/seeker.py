@@ -182,7 +182,8 @@ if __name__ == "__main__":
     print("Answer 'yes', 'no', or 'quit' to exit.\n")
     
     # Create a simple LLMAdapter config for testing
-    from .llm_adapter import LLMConfig, LLMAdapter
+    from .llm_adapter import LLMAdapter
+    from .llm_config import LLMConfig
     
     # Use a minimal config (will fail LLM calls, but we can test the conversation flow)
     config = LLMConfig(

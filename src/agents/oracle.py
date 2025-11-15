@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Set
 
-from ..data_types import Answer, Question
+from ..data_types import Answer, Question, OracleResponse
 from ..graph import Node
 from ..prompts import get_oracle_system_prompt
 from .llm_adapter import LLMAdapter
@@ -92,27 +92,17 @@ class OracleAgent:
             The Oracle must answer truthfully and return JSON with rationale, answer, and game_over status.
         """
         # Generate answer (expecting JSON response with rationale first)
-        raw_response = self._llm_adapter.generate(max_tokens=150, temperature=0.1)
-        
-        # Parse JSON response
-        parsed = parse_first_json_object(raw_response)
-        if parsed is None:
-            # Fallback if JSON parsing fails
-            answer_text = raw_response.strip()
-            game_over = False
-        else:
-            # Extract fields (rationale is for internal use, not returned to Seeker)
-            answer_text = str(parsed.get("answer", raw_response.strip()))
-            game_over = bool(parsed.get("game_over", False))
-            rationale = parsed.get("rationale", "")  # Available for future logging
+        response = self._llm_adapter.generate()
+
+        oracle_response = OracleResponse.model_validate_json(response)
         
         # Check compliance
-        is_compliant = self._check_compliance(answer_text)
+        is_compliant = self._check_compliance(oracle_response.answer)
         
         # Track usage
-        self._answers_given += 1
+        self._answers_given += 1    
         
-        return Answer(text=answer_text, compliant=is_compliant, game_over=game_over, rationale=rationale)
+        return Answer(text=oracle_response.answer, compliant=is_compliant, game_over=oracle_response.game_over, rationale=oracle_response.rationale)
 
     def _build_system_prompt_with_target(self, target_node: Node) -> str:
         """Build system prompt with target information included.
@@ -172,7 +162,8 @@ if __name__ == "__main__":
 
     from os import getenv
     from dotenv import load_dotenv
-    from .llm_adapter import LLMConfig, LLMAdapter
+    from .llm_adapter import LLMAdapter
+    from .llm_config import LLMConfig
 
     load_dotenv()
 
