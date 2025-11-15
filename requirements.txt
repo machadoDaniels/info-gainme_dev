@@ -6,10 +6,15 @@ python-dotenv>=1.0.0
 # Data processing
 pandas>=2.0.0
 pyarrow>=12.0.0
+pyyaml>=6.0.0
 
 # Network analysis and visualization
 networkx>=3.0.0
 matplotlib>=3.7.0
+
+# Token counting
+transformers>=4.30.0
+tqdm>=4.65.0
 
 # Web requests (for deprecated modules)
 requests>=2.31.0
