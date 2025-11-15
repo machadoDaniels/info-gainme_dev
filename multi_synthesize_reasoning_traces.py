@@ -1,4 +1,4 @@
-#!/Users/daniel2/Documents/AKCIT-RL/clary_quest/.conda/bin/python
+#!/usr/bin/env python3
 """Batch synthesize reasoning traces for all conversations.
 
 This script processes all seeker.json files in conversation directories

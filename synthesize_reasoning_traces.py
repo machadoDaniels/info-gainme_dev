@@ -1,9 +1,9 @@
-#!/Users/daniel2/Documents/AKCIT-RL/clary_quest/.conda/bin/python
+#!/usr/bin/env python3
 """Synthesize reasoning traces from SeekerAgent conversations.
 
 This script reads seeker.json files containing reasoning_history and creates
 synthesized seeker_traces.json files with turn-based structure:
-- Each turn contains: turn_index, original_reasoning, reasoning_trace (summary, options_considered, decision_rationale), question, oracle_answer
+- Each turn contains: turn_index, original_reasoning, reasoning_trace (summary, questions_considered, decision_rationale), question, oracle_answer
 - Output format similar to seeker.json but with synthesized reasoning traces
 """
 
@@ -41,7 +41,7 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="gpt-4o-mini",
+        default="gpt-5.1-2025-11-13",
         help="LLM model to use for synthesis (default: gpt-4o-mini)"
     )
     parser.add_argument(
@@ -56,7 +56,7 @@ def main():
     parser.add_argument(
         "--temperature",
         type=float,
-        default=0.0,
+        default=None,
         help="Temperature for LLM generation (default: 0.0)"
     )
     
