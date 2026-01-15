@@ -351,9 +351,9 @@ def calculate_aggregate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]
     
     # Calculate SEs (hierarchical: std / sqrt(num_targets))
     se_optimal_choice_rate = std_optimal_choice_rate / math.sqrt(num_targets) if num_targets > 1 else 0.0
-    se_chosen_info_gain = std_chosen_info_gain / math.sqrt(len(target_chosen_igs)) if target_chosen_igs and len(target_chosen_igs) > 1 else None
-    se_optimal_info_gain = std_optimal_info_gain / math.sqrt(len(target_optimal_igs)) if target_optimal_igs and len(target_optimal_igs) > 1 else None
-    se_questions_considered_per_turn = std_questions_considered_per_turn / math.sqrt(len(target_questions)) if target_questions and len(target_questions) > 1 else None
+    se_chosen_info_gain = std_chosen_info_gain / math.sqrt(len(target_chosen_igs)) if std_chosen_info_gain is not None and target_chosen_igs and len(target_chosen_igs) > 1 else None
+    se_optimal_info_gain = std_optimal_info_gain / math.sqrt(len(target_optimal_igs)) if std_optimal_info_gain is not None and target_optimal_igs and len(target_optimal_igs) > 1 else None
+    se_questions_considered_per_turn = std_questions_considered_per_turn / math.sqrt(len(target_questions)) if std_questions_considered_per_turn is not None and target_questions and len(target_questions) > 1 else None
     
     return {
         "total_conversations": len(results),
