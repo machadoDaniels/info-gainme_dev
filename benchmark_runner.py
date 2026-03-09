@@ -87,12 +87,15 @@ def main() -> None:
         total_games,
     )
 
+    max_workers = config.get("experiment", {}).get("max_workers", 1)
+
     runner = BenchmarkRunner(config=benchmark_config, output_base=output_base)
     csv_path = runner.run(
         pool=pool,
         targets=targets,
         runs_per_target=runs_per_target,
         debug=debug,
+        max_workers=max_workers,
     )
 
     logger.info("Benchmark complete. Results: %s", csv_path)

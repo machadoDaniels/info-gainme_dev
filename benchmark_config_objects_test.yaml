@@ -26,6 +26,7 @@ dataset:
 
 experiment:
   name: "objects_test"
+  max_workers: 8
 
 output:
   base_dir: "outputs"

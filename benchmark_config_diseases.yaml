@@ -33,6 +33,7 @@ dataset:
 
 experiment:
   name: "diseases_full_po"
+  max_workers: 8
 
 output:
   base_dir: "outputs"

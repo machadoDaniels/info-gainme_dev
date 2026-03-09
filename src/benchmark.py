@@ -5,7 +5,10 @@ Runs multiple games across targets and writes incremental results to CSV.
 
 from __future__ import annotations
 
+import copy
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable
 import csv
@@ -98,10 +101,13 @@ class BenchmarkRunner:
         targets: Iterable[Candidate],
         runs_per_target: int = 1,
         debug: bool = False,  # unused — verbosity controlled by log level
+        max_workers: int = 1,
     ) -> Path:
         """Run the benchmark across targets and append results to CSV.
 
         Supports resuming interrupted experiments by detecting completed runs.
+        When max_workers > 1 each game runs in its own thread with an isolated
+        pool copy; CSV writes are serialised with a lock.
 
         Returns:
             Path to the 'runs.csv' file with appended results.
@@ -111,95 +117,114 @@ class BenchmarkRunner:
         self._ensure_header(csv_path)
 
         completed_runs = self._get_completed_runs(csv_path)
-        game_counter = len(completed_runs) + 1
 
+        # Pre-assign game counters so directory names are deterministic
+        work_items: list[tuple[int, Candidate, int]] = []
+        game_counter = len(completed_runs) + 1
         skipped_count = 0
-        total_planned = 0
 
         for target in targets:
             for run_idx in range(1, int(runs_per_target) + 1):
-                safe_label = target.label.replace(" ", "_").replace("/", "-")
-                safe_id = target.id.replace(":", "")
-                conv_dir = (
-                    self._output_dir() / "conversations" /
-                    f"game_{game_counter:03d}_{safe_label}_{safe_id}"
-                )
-
-                total_planned += 1
-
                 if (target.id, run_idx) in completed_runs:
                     skipped_count += 1
-                    logger.debug("Skipping %s [%s] run %d/%d (already completed)", target.label, target.id, run_idx, runs_per_target)
+                    logger.debug(
+                        "Skipping %s [%s] run %d/%d (already completed)",
+                        target.label, target.id, run_idx, runs_per_target,
+                    )
                     continue
-
-                logger.info("Running %s [%s] run %d/%d", target.label, target.id, run_idx, runs_per_target)
-
-                # Reset pool before each game
-                pool.reset()
-
-                orch = Orchestrator.from_target(
-                    target=target,
-                    pool=pool,
-                    seeker_config=self.config.seeker_config,
-                    oracle_config=self.config.oracle_config,
-                    pruner_config=self.config.pruner_config,
-                    observability_mode=self.config.observability_mode,
-                    max_turns=self.config.max_turns,
-                    domain_config=self.config.domain_config,
-                )
-
-                orch.run(debug=debug)
-
-                conv_path_str = ""
-                if self.config.save_conversations:
-                    orch.export_conversation(conv_dir)
-
-                    metadata_path = conv_dir / "metadata.json"
-                    if metadata_path.exists():
-                        metadata = json.loads(metadata_path.read_text())
-                        metadata["game_id"] = game_counter
-                        metadata["config"]["experiment_name"] = self.config.experiment_name
-                        metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
-
-                    conv_path_str = str(conv_dir.relative_to(self.output_base))
-
+                work_items.append((game_counter, target, run_idx))
                 game_counter += 1
 
-                turns = orch.turns
-                win = any(t.answer.game_over for t in turns)
-                compliance_rate = (
-                    sum(1 for t in turns if t.answer.compliant) / len(turns)
-                ) if turns else 0.0
-                summary = orch.get_summary()
-
-                with csv_path.open("a", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(
-                        [
-                            self.config.experiment_name or "default",
-                            self.config.seeker_config.model,
-                            self.config.oracle_config.model,
-                            self.config.pruner_config.model,
-                            self.config.observability_mode.name,
-                            self.config.max_turns,
-                            target.id,
-                            target.label,
-                            run_idx,
-                            summary.get("turns"),
-                            summary.get("h_start"),
-                            summary.get("h_end"),
-                            summary.get("total_info_gain"),
-                            summary.get("avg_info_gain_per_turn"),
-                            int(win),
-                            round(compliance_rate, 4),
-                            conv_path_str,
-                        ]
-                    )
+        total_planned = len(work_items) + skipped_count
 
         if skipped_count > 0:
             logger.info(
-                "Resume summary | planned=%d | skipped=%d | executed=%d",
-                total_planned, skipped_count, total_planned - skipped_count,
+                "Resume | planned=%d | skipped=%d | to_run=%d",
+                total_planned, skipped_count, len(work_items),
             )
+
+        csv_lock = threading.Lock()
+
+        def _run_one(game_idx: int, target: Candidate, run_idx: int) -> None:
+            logger.info("[game %d] %s [%s] run %d/%d", game_idx, target.label, target.id, run_idx, runs_per_target)
+
+            game_pool = copy.deepcopy(pool)
+
+            safe_label = target.label.replace(" ", "_").replace("/", "-")
+            safe_id = target.id.replace(":", "")
+            conv_dir = (
+                self._output_dir() / "conversations" /
+                f"game_{game_idx:03d}_{safe_label}_{safe_id}"
+            )
+
+            orch = Orchestrator.from_target(
+                target=target,
+                pool=game_pool,
+                seeker_config=self.config.seeker_config,
+                oracle_config=self.config.oracle_config,
+                pruner_config=self.config.pruner_config,
+                observability_mode=self.config.observability_mode,
+                max_turns=self.config.max_turns,
+                domain_config=self.config.domain_config,
+            )
+
+            orch.run(debug=debug)
+
+            conv_path_str = ""
+            if self.config.save_conversations:
+                orch.export_conversation(conv_dir)
+
+                metadata_path = conv_dir / "metadata.json"
+                if metadata_path.exists():
+                    metadata = json.loads(metadata_path.read_text())
+                    metadata["game_id"] = game_idx
+                    metadata["config"]["experiment_name"] = self.config.experiment_name
+                    metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+
+                conv_path_str = str(conv_dir.relative_to(self.output_base))
+
+            turns = orch.turns
+            win = any(t.answer.game_over for t in turns)
+            compliance_rate = (
+                sum(1 for t in turns if t.answer.compliant) / len(turns)
+            ) if turns else 0.0
+            summary = orch.get_summary()
+
+            row = [
+                self.config.experiment_name or "default",
+                self.config.seeker_config.model,
+                self.config.oracle_config.model,
+                self.config.pruner_config.model,
+                self.config.observability_mode.name,
+                self.config.max_turns,
+                target.id,
+                target.label,
+                run_idx,
+                summary.get("turns"),
+                summary.get("h_start"),
+                summary.get("h_end"),
+                summary.get("total_info_gain"),
+                summary.get("avg_info_gain_per_turn"),
+                int(win),
+                round(compliance_rate, 4),
+                conv_path_str,
+            ]
+
+            with csv_lock:
+                with csv_path.open("a", newline="") as f:
+                    csv.writer(f).writerow(row)
+
+            logger.info("[game %d] done | win=%s | turns=%s", game_idx, bool(win), summary.get("turns"))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_run_one, gi, t, ri): (gi, t, ri)
+                for gi, t, ri in work_items
+            }
+            for future in as_completed(futures):
+                exc = future.exception()
+                if exc:
+                    gi, t, ri = futures[future]
+                    logger.error("[game %d] %s run %d failed: %s", gi, t.label, ri, exc)
 
         return csv_path
