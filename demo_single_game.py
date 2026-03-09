@@ -32,7 +32,7 @@ os.makedirs(OUTPUT_PATH, exist_ok=True)
 def main() -> None:
     """Run the benchmark demonstration."""
     load_dotenv()
-    setup_logging(debug=True)
+    setup_logging()
 
     logger.info("Clary Quest - Geographic Benchmark")
 

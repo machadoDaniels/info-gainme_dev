@@ -33,7 +33,7 @@ os.makedirs(OUTPUT_PATH, exist_ok=True)
 def main() -> None:
     """Run the benchmark with flat object dataset."""
     load_dotenv()
-    setup_logging(debug=True)
+    setup_logging()
 
     logger.info("Clary Quest - Objects Benchmark (non-hierarchical)")
 

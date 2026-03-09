@@ -30,19 +30,19 @@ def main() -> None:
     api_key = getenv("OPENAI_API_KEY")
     if not api_key:
         # Setup basic logging so the error is visible
-        setup_logging(debug=False)
+        setup_logging()
         logger.error("OPENAI_API_KEY environment variable not set!")
         return
 
     try:
         benchmark_config, config = load_benchmark_config(args.config, api_key)
     except Exception as e:
-        setup_logging(debug=False)
+        setup_logging()
         logger.error("Error loading configuration: %s", e)
         return
 
     debug = config["debug"]["enabled"]
-    setup_logging(debug=debug)
+    setup_logging()
 
     dataset_cfg = config.get("dataset", {})
     dataset_type = dataset_cfg.get("type", "geo")
