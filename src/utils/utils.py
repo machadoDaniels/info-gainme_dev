@@ -31,10 +31,10 @@ def llm_final_content(text: str) -> str:
     # Remove text before </think> tags
     text = re.sub(r'.*</think>', '', text, flags=re.IGNORECASE | re.DOTALL)
     
-    # Remove markdown code blocks
-    # text = re.sub(r'```(?:json)?\s*', '', text)
-    # text = re.sub(r'\s*```', '', text)
-    
+    # Remove markdown code blocks (```json ... ``` or ``` ... ```)
+    text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+    text = re.sub(r"\n?```\s*$", "", text)
+
     # Strip excessive whitespace
     return text.strip()
 

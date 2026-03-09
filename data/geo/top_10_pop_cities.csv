@@ -1,0 +1,11 @@
+city_id,city_name,state_id,state_name,country_id,country_name,region_id,region_name,subregion_id,subregion_name,population_2025
+64500,Tokyo,823,Tokyo,109,Japan,3,Asia,12,Eastern Asia,37036200
+131679,Delhi,4021,Delhi,101,India,3,Asia,14,Southern Asia,34665600
+20063,Shanghai,2249,Shanghai,45,China,3,Asia,12,Eastern Asia,30482100
+31802,Cairo,3223,Cairo,65,Egypt,1,Africa,1,Northern Africa,23074200
+19332,Beijing,2257,Beijing,45,China,3,Asia,12,Eastern Asia,22596500
+133024,Mumbai,4008,Maharashtra,101,India,3,Asia,14,Southern Asia,22089000
+64214,Osaka,859,Ōsaka,109,Japan,3,Asia,12,Eastern Asia,18921600
+19404,Chongqing,2271,Chongqing,45,China,3,Asia,12,Eastern Asia,18171200
+85521,Karachi,3175,Sindh,167,Pakistan,3,Asia,14,Southern Asia,18076800
+77002,Lagos,306,Lagos,161,Nigeria,1,Africa,3,Western Africa,17156400

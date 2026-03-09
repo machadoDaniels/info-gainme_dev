@@ -45,19 +45,50 @@ def load_prompt(prompt_name: str) -> str:
     return content
 
 
-def get_seeker_system_prompt() -> str:
-    """Get the SeekerAgent system prompt."""
-    return load_prompt("seeker_system")
+def get_seeker_system_prompt(
+    target_noun: str = "city",
+    domain_description: str = "geographic (cities, countries, regions)",
+) -> str:
+    """Get the SeekerAgent system prompt.
+
+    Args:
+        target_noun: Term for the target ("city" or "object").
+        domain_description: Description of the domain for context.
+    """
+    content = load_prompt("seeker_system")
+    return content.replace("{TARGET_NOUN}", target_noun).replace(
+        "{DOMAIN_DESCRIPTION}", domain_description
+    )
 
 
-def get_oracle_system_prompt() -> str:
-    """Get the OracleAgent system prompt."""
-    return load_prompt("oracle_system")
+def get_oracle_system_prompt(
+    target_noun: str = "city",
+    domain_description: str = "geographic (cities, countries, regions)",
+) -> str:
+    """Get the OracleAgent system prompt.
+
+    Args:
+        target_noun: Term for the target ("city" or "object").
+        domain_description: Description of the domain for context.
+    """
+    content = load_prompt("oracle_system")
+    return content.replace("{TARGET_NOUN}", target_noun).replace(
+        "{DOMAIN_DESCRIPTION}", domain_description
+    )
 
 
-def get_pruner_system_prompt() -> str:
-    """Get the PrunerAgent system prompt."""
-    return load_prompt("pruner_system")
+def get_pruner_system_prompt(
+    node_id_prefix: str = "city:",
+    target_noun: str = "city",
+) -> str:
+    """Get the PrunerAgent system prompt.
+
+    Args:
+        node_id_prefix: Prefix for leaf node IDs (e.g. "city:" or "object:").
+        target_noun: Noun for target in instructions ("city" or "object").
+    """
+    content = load_prompt("pruner_system")
+    return content.replace("{NODE_PREFIX}", node_id_prefix).replace("{TARGET_NOUN}", target_noun)
 
 
 def get_reasoning_synthesis_prompt() -> str:

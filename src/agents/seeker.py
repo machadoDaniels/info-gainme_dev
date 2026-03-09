@@ -12,6 +12,7 @@ from os import getenv
 
 from ..data_types import ObservabilityMode, Question, Answer
 from ..graph import Node
+from ..domain.types import DomainConfig, GEO_DOMAIN
 from ..prompts import get_seeker_system_prompt
 from .llm_adapter import LLMAdapter
 from dotenv import load_dotenv
@@ -26,9 +27,10 @@ class SeekerAgent:
     """
 
     def __init__(
-        self, 
-        llm_adapter: LLMAdapter, 
-        observability_mode: ObservabilityMode
+        self,
+        llm_adapter: LLMAdapter,
+        observability_mode: ObservabilityMode,
+        domain_config: DomainConfig | None = None,
     ) -> None:
         """Initialize the SeekerAgent.
         
@@ -48,11 +50,18 @@ class SeekerAgent:
         self._model = llm_adapter.config.model
         self._llm_adapter = llm_adapter
         self._observability_mode = observability_mode
+        self._domain_config = domain_config or GEO_DOMAIN
         self._questions_asked = 0
         self._initial_graph_injected: bool = False
-        
+
         # Initialize conversation with system prompt
-        self._llm_adapter.append_history("system", get_seeker_system_prompt())
+        self._llm_adapter.append_history(
+            "system",
+            get_seeker_system_prompt(
+                target_noun=self._domain_config.target_noun,
+                domain_description=self._domain_config.domain_description,
+            ),
+        )
 
     @property
     def model(self) -> str:

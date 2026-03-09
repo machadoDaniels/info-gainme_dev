@@ -177,6 +177,10 @@ class KnowledgeGraph:
             e for e in self.edges if e.source_id in active_ids and e.target_id in active_ids
         ]
 
+        # Detect flat graphs (only leaf-type nodes, no layer, no edges)
+        has_layer = any(n.attrs.get("layer") is not None for n in active_nodes)
+        leaf_types = {"city", "object"}
+
         # Group nodes by type and sort deterministically
         type_to_nodes: dict[str, list[Node]] = {}
         for node in active_nodes:
@@ -184,14 +188,20 @@ class KnowledgeGraph:
             type_to_nodes.setdefault(node_type, []).append(node)
 
         def sort_key(n: Node) -> tuple[int, str, str]:
-            layer = int(node.attrs.get("layer", 0)) if (node := n) else 0  # safeguard
-            return (layer, str(n.attrs.get("type", "")), n.label)
+            layer = int(n.attrs.get("layer", 0)) if n.attrs.get("layer") is not None else 0
+            category = str(n.attrs.get("category", ""))
+            return (layer, category, n.label)
 
         for nodes in type_to_nodes.values():
             nodes.sort(key=sort_key)
 
-        # Preferred order for geographic graphs
-        preferred_order = ["region", "subregion", "country", "state", "city"]
+        # Preferred order: geographic hierarchy vs flat (group by category)
+        if has_layer and active_edges:
+            preferred_order = ["region", "subregion", "country", "state", "city"]
+        else:
+            # Flat graph: group by category if available, else by type
+            preferred_order = list(leaf_types & type_to_nodes.keys()) or list(type_to_nodes.keys())
+
         other_types = sorted(t for t in type_to_nodes.keys() if t not in preferred_order)
         ordered_types = [t for t in preferred_order if t in type_to_nodes] + other_types
 
@@ -201,11 +211,23 @@ class KnowledgeGraph:
             f"Nodes: {len(active_nodes)} | Edges: {len(active_edges)} | Pruned: {len(self.pruned_ids)}"
         )
 
-        # Nodes by type
-        for t in ordered_types:
-            lines.append(f"\n[{t}] ({len(type_to_nodes[t])})")
-            for n in type_to_nodes[t]:
-                lines.append(f"- {n.label} [{n.id}]")
+        # For flat graphs with category, group nodes by category for readability
+        if not has_layer and not active_edges:
+            category_to_nodes: dict[str, list[Node]] = {}
+            for node in active_nodes:
+                cat = str(node.attrs.get("category", "other"))
+                category_to_nodes.setdefault(cat, []).append(node)
+            for cat in sorted(category_to_nodes.keys()):
+                nds = sorted(category_to_nodes[cat], key=lambda n: n.label)
+                lines.append(f"\n[{cat}] ({len(nds)})")
+                for n in nds:
+                    lines.append(f"- {n.label} [{n.id}]")
+        else:
+            # Hierarchical: nodes by type
+            for t in ordered_types:
+                lines.append(f"\n[{t}] ({len(type_to_nodes[t])})")
+                for n in type_to_nodes[t]:
+                    lines.append(f"- {n.label} [{n.id}]")
 
         # Relations (trim long lists to keep prompts compact)
         if active_edges:

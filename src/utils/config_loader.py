@@ -7,6 +7,7 @@ from typing import Dict, Any
 from ..data_types import ObservabilityMode
 from ..agents.llm_config import LLMConfig
 from ..benchmark_config import BenchmarkConfig
+from ..domain.types import GEO_DOMAIN, OBJECTS_DOMAIN, DISEASES_DOMAIN
 
 
 def load_benchmark_config(config_path: Path, api_key: str) -> tuple[BenchmarkConfig, Dict[str, Any]]:
@@ -58,16 +59,25 @@ def load_benchmark_config(config_path: Path, api_key: str) -> tuple[BenchmarkCon
         raise ValueError(f"Unknown observability mode: {mode_str}")
     
     models = config["models"]
+    dataset_type = config.get("dataset", {}).get("type", "geo")
+    if dataset_type == "objects":
+        domain_config = OBJECTS_DOMAIN
+    elif dataset_type == "diseases":
+        domain_config = DISEASES_DOMAIN
+    else:
+        domain_config = GEO_DOMAIN
+
     benchmark_config = BenchmarkConfig(
         seeker_config=create_llm_config(models["seeker"]),
         oracle_config=create_llm_config(models["oracle"]),
         pruner_config=create_llm_config(models["pruner"]),
         observability_mode=observability_mode,
         max_turns=config["game"]["max_turns"],
+        domain_config=domain_config,
         experiment_name=config["experiment"]["name"],
         tags=config["experiment"].get("tags", {}),
         save_conversations=config["output"]["save_conversations"],
-        save_graph_plots=config["output"]["save_graph_plots"]
+        save_graph_plots=config["output"]["save_graph_plots"],
     )
-    
+
     return benchmark_config, config

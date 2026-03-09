@@ -10,9 +10,10 @@ from typing import Set
 
 from ..data_types import Answer, PruningResult, Question, PrunerResponse
 from ..graph import Node
+from ..domain.types import DomainConfig, GEO_DOMAIN
 from .llm_adapter import LLMAdapter
 from ..prompts import get_pruner_system_prompt
-from ..utils.utils import parse_first_json_object
+from ..utils.utils import llm_final_content, parse_first_json_object
 
 
 class PrunerAgent:
@@ -24,18 +25,27 @@ class PrunerAgent:
     AI-assisted pruning decisions.
     """
     
-    def __init__(self, llm_adapter: LLMAdapter) -> None:
+    def __init__(
+        self,
+        llm_adapter: LLMAdapter,
+        domain_config: DomainConfig | None = None,
+    ) -> None:
         """Initialize the PrunerAgent.
-        
+
         Args:
             llm_adapter: LLM adapter for AI-assisted pruning decisions.
+            domain_config: Domain config for prompt customization. Defaults to GEO_DOMAIN.
         """
         self.llm_adapter = llm_adapter
+        self.domain_config = domain_config or GEO_DOMAIN
         self.pruning_count = 0
-        
+
         # Add system prompt to history for export (if save_history is enabled)
         if self.llm_adapter._save_history:
-            system_prompt = get_pruner_system_prompt()
+            system_prompt = get_pruner_system_prompt(
+                node_id_prefix=self.domain_config.node_id_prefix,
+                target_noun=self.domain_config.target_noun,
+            )
             self.llm_adapter.append_history("system", system_prompt)
     
     def analyze_and_prune(
@@ -47,6 +57,7 @@ class PrunerAgent:
         *,
         active_leaf_nodes: Set[Node] = None,
         target_node_id: str = None,
+        node_id_prefix: str = "city:",
     ) -> PruningResult:
         """Delegate pruning decision to the LLM using graph text and turn context.
 
@@ -67,10 +78,17 @@ class PrunerAgent:
         Note:
             Uses stateless LLM calls (each request is independent) but saves to history
             for export and analysis purposes.
-            CRITICAL: Only CITY nodes can be pruned, as only cities can be targets.
-            CRITICAL: The target node will NEVER be included in pruned_ids.
+            CRITICAL: Only leaf nodes can be pruned. The target will NEVER be included in pruned_ids.
         """
-        system_prompt = get_pruner_system_prompt()
+        target_noun = (
+            self.domain_config.target_noun
+            if node_id_prefix == self.domain_config.node_id_prefix
+            else (node_id_prefix.rstrip(":") or "item")
+        )
+        system_prompt = get_pruner_system_prompt(
+            node_id_prefix=node_id_prefix,
+            target_noun=target_noun,
+        )
 
         user_prompt = (
             "GRAPH:\n" + graph_text + "\n\n" +
@@ -92,11 +110,12 @@ class PrunerAgent:
         # Make stateless call (don't use accumulated history)
         # Note: add_to_history defaults to True, so it will auto-save the response
         reply = self.llm_adapter.generate(
-            messages=messages, 
+            messages=messages,
             stateless=True,  # Use only these messages, not history
             # temperature=0.0,
             # add_to_history=True is default, so response is auto-saved
         )
+        reply = llm_final_content(reply)
         try:
             pruning_response = PrunerResponse.model_validate_json(reply)
         except Exception as e:
@@ -108,34 +127,29 @@ class PrunerAgent:
         pruned_ids_list = pruning_response.pruned_ids
         rationale = pruning_response.rationale
 
-        # Filter to only include CITY nodes (targets can only be cities)
+        # Filter to only include leaf nodes (prefix-based: city:, object:, etc.)
         candidate_ids = {str(x) for x in pruned_ids_list if isinstance(x, (str, int))}
-        city_ids = {node_id for node_id in candidate_ids if node_id.startswith("city:")}
-        
-        # Additional validation: ensure city_ids are in active leaf nodes (cities)
-        validated_city_ids = city_ids.copy()
+        leaf_ids = {node_id for node_id in candidate_ids if node_id.startswith(node_id_prefix)}
+
+        # Additional validation: ensure leaf_ids are in active leaf nodes
+        validated_leaf_ids = leaf_ids.copy()
         if active_leaf_nodes is not None:
-            # active_nodes should be leaf nodes (cities) from the graph
             active_leaf_ids = {node.id for node in active_leaf_nodes}
-            validated_city_ids = city_ids & active_leaf_ids
-            
-            # Update rationale if some cities were filtered out
-            invalid_cities = city_ids - active_leaf_ids
-            if invalid_cities:
-                rationale = f"Filtered out inactive cities {invalid_cities}: {rationale}"
+            validated_leaf_ids = leaf_ids & active_leaf_ids
+            invalid_leaves = leaf_ids - active_leaf_ids
+            if invalid_leaves:
+                rationale = f"Filtered out inactive nodes {invalid_leaves}: {rationale}"
 
         # CRITICAL: Remove target node from pruned_ids to prevent accidental pruning
-        if target_node_id and target_node_id in validated_city_ids:
-            validated_city_ids.remove(target_node_id)
+        if target_node_id and target_node_id in validated_leaf_ids:
+            validated_leaf_ids.remove(target_node_id)
 
-        # If LLM returned non-city IDs, raise an error
-        if candidate_ids and not city_ids:
-            raise ValueError("LLM returned non-city IDs")
-        
-        if len(candidate_ids) > len(city_ids):
-            filtered_out = candidate_ids - city_ids
-            raise ValueError(f"Filtered out non-city nodes {filtered_out}: {rationale}")
+        if candidate_ids and not leaf_ids:
+            raise ValueError(f"LLM returned non-leaf IDs (expected prefix {node_id_prefix!r})")
+        if len(candidate_ids) > len(leaf_ids):
+            filtered_out = candidate_ids - leaf_ids
+            raise ValueError(f"Filtered out non-leaf nodes {filtered_out}: {rationale}")
 
-        self.pruning_count += len(validated_city_ids)
-        return PruningResult(pruned_ids=validated_city_ids, rationale=rationale)
+        self.pruning_count += len(validated_leaf_ids)
+        return PruningResult(pruned_ids=validated_leaf_ids, rationale=rationale)
         

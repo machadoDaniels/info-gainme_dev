@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 
 from src.data_types import ObservabilityMode
 from src.agents.llm_config import LLMConfig
+from src.domain.types import DomainConfig, GEO_DOMAIN
 
 
 @dataclass
@@ -19,10 +20,13 @@ class BenchmarkConfig:
     observability_mode: ObservabilityMode
     max_turns: int
 
+    # Domain configuration (geo vs flat objects)
+    domain_config: Optional[DomainConfig] = None
+
     # Optional experiment metadata
     experiment_name: Optional[str] = None
     tags: Dict[str, Any] = field(default_factory=dict)
-    
+
     # Conversation and visualization saving options
     save_conversations: bool = True
     save_graph_plots: bool = False  # Save graph visualizations for each turn

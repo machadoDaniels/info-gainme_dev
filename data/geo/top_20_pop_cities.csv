@@ -1,0 +1,21 @@
+city_id,city_name,state_id,state_name,country_id,country_name,region_id,region_name,subregion_id,subregion_name," "
+64500,Tokyo,823,Tokyo,109,Japan,3,Asia,12,Eastern Asia,37036200
+131679,Delhi,4021,Delhi,101,India,3,Asia,14,Southern Asia,34665600
+20063,Shanghai,2249,Shanghai,45,China,3,Asia,12,Eastern Asia,30482100
+31802,Cairo,3223,Cairo,65,Egypt,1,Africa,1,Northern Africa,23074200
+19332,Beijing,2257,Beijing,45,China,3,Asia,12,Eastern Asia,22596500
+133024,Mumbai,4008,Maharashtra,101,India,3,Asia,14,Southern Asia,22089000
+64214,Osaka,859,Ōsaka,109,Japan,3,Asia,12,Eastern Asia,18921600
+19404,Chongqing,2271,Chongqing,45,China,3,Asia,12,Eastern Asia,18171200
+85521,Karachi,3175,Sindh,167,Pakistan,3,Asia,14,Southern Asia,18076800
+77002,Lagos,306,Lagos,161,Nigeria,1,Africa,3,Western Africa,17156400
+153786,Istanbul,2170,İstanbul,225,Turkey,3,Asia,11,Western Asia,16236700
+142001,Kolkata,4853,West Bengal,101,India,3,Asia,14,Southern Asia,15845200
+19562,Guangzhou,2279,Guangdong,45,China,3,Asia,12,Eastern Asia,14878700
+85572,Lahore,3176,Punjab,167,Pakistan,3,Asia,14,Southern Asia,14825800
+149198,Tianjin,2276,Tianjin,45,China,3,Asia,12,Eastern Asia,14704100
+14309,Rio de Janeiro,1997,Rio de Janeiro,31,Brazil,2,Americas,8,South America,13923200
+20091,Shenzhen,2279,Guangdong,45,China,3,Asia,12,Eastern Asia,13545400
+99972,Moscow,1901,Moscow,182,Russia,4,Europe,15,Eastern Europe,12737400
+131517,Chennai,4035,Tamil Nadu,101,India,3,Asia,14,Southern Asia,12336000
+80701,Lima,3695,Lima,173,Peru,2,Americas,8,South America,11517300

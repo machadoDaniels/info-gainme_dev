@@ -15,6 +15,7 @@ import json
 from .entropy import Entropy
 from .graph import KnowledgeGraph, Node
 from .data_types import TurnState, Question, Answer, ObservabilityMode
+from .domain.types import DomainConfig, GEO_DOMAIN
 from .agents.seeker import SeekerAgent
 from .agents.oracle import OracleAgent
 from .agents.pruner import PrunerAgent
@@ -61,6 +62,7 @@ class Orchestrator:
         self._entropy = entropy
         self._max_turns = max_turns
         self._pruner = pruner
+        self._domain_config = getattr(pruner, "domain_config", None) or GEO_DOMAIN
 
         self._current_turn: int = 0
         self._turns: List[TurnState] = []
@@ -84,6 +86,7 @@ class Orchestrator:
         pruner_config: LLMConfig,
         observability_mode: ObservabilityMode = ObservabilityMode.FULLY_OBSERVABLE,
         max_turns: int = 40,
+        domain_config: DomainConfig | None = None,
     ) -> Orchestrator:
         """Factory method to create an Orchestrator with all agents configured.
         
@@ -115,33 +118,42 @@ class Orchestrator:
         seeker_adapter = LLMAdapter(seeker_config, save_reasoning=True)
         oracle_adapter = LLMAdapter(oracle_config, save_reasoning=True)
         pruner_adapter = LLMAdapter(pruner_config, save_reasoning=True)  # Save history but use stateless calls
-        
+
+        domain_config = domain_config or GEO_DOMAIN
+
         # Create agents
         seeker = SeekerAgent(
             llm_adapter=seeker_adapter,
-            observability_mode=observability_mode
+            observability_mode=observability_mode,
+            domain_config=domain_config,
         )
-        
+
         oracle = OracleAgent(
             llm_adapter=oracle_adapter,
             target_node_id=target_node.id,
-            target_node=target_node
+            target_node=target_node,
+            domain_config=domain_config,
         )
-        
-        pruner = PrunerAgent(llm_adapter=pruner_adapter)
+
+        pruner = PrunerAgent(
+            llm_adapter=pruner_adapter,
+            domain_config=domain_config,
+        )
         
         # Create entropy calculator
         entropy = Entropy()
         
         # Return configured orchestrator
-        return cls(
+        orch = cls(
             graph=graph,
             seeker=seeker,
             oracle=oracle,
             pruner=pruner,
             entropy=entropy,
-            max_turns=max_turns
+            max_turns=max_turns,
         )
+        orch._domain_config = domain_config
+        return orch
 
     def show_turn(self, turn: TurnState) -> None:
         """Show the turn state with detailed information."""
@@ -158,7 +170,9 @@ class Orchestrator:
         print(f"🔍 Pruned Nodes: {turn.pruning_result.pruned_ids}")
 
         # Show current active nodes count
-        active_leaf_count = len(self._graph.get_active_leaf_nodes())
+        active_leaf_count = len(
+            self._graph.get_active_leaf_nodes(leaf_type=self._domain_config.leaf_type)
+        )
         print(f"🎯 Active Leaf Nodes: {active_leaf_count}") 
         active_count = len(self._graph.get_active_nodes())
         print(f"🎯 Active Nodes: {active_count}")
@@ -202,8 +216,10 @@ class Orchestrator:
             active_nodes = self._graph.get_active_nodes()
             active_nodes_before = len(active_nodes)
             
-            # Compute entropy only over leaf nodes (cities) since only they can be targets
-            active_leaf_nodes = self._graph.get_active_leaf_nodes()
+            # Compute entropy only over leaf nodes since only they can be targets
+            active_leaf_nodes = self._graph.get_active_leaf_nodes(
+                leaf_type=self._domain_config.leaf_type
+            )
             active_leaf_nodes_before = len(active_leaf_nodes)
             h_before = self._entropy.compute(active_leaf_nodes)
 
@@ -238,6 +254,7 @@ class Orchestrator:
                 answer=answer,
                 active_leaf_nodes=active_leaf_nodes,
                 target_node_id=self._oracle._target_node_id,
+                node_id_prefix=self._domain_config.node_id_prefix,
             )
             if pruning_result.pruned_ids:
                 self._graph.apply_pruning(pruning_result.pruned_ids)
@@ -252,9 +269,11 @@ class Orchestrator:
                 turn=turn,
             )
 
-            # Compute entropy after pruning (only over leaf nodes/cities)
+            # Compute entropy after pruning (only over leaf nodes)
             active_nodes_after = len(self._graph.get_active_nodes())
-            active_leaf_nodes_after = self._graph.get_active_leaf_nodes()
+            active_leaf_nodes_after = self._graph.get_active_leaf_nodes(
+                leaf_type=self._domain_config.leaf_type
+            )
             active_leaf_nodes_after_count = len(active_leaf_nodes_after)
             
             # If game is won, entropy should be 0 (target found, no uncertainty)
@@ -411,7 +430,9 @@ class Orchestrator:
         
         total_pruned = sum(t.pruned_count for t in self._turns)
         initial_nodes = len(self._graph.nodes)
-        final_active = len(self._graph.get_active_nodes())
+        final_active = len(
+            self._graph.get_active_leaf_nodes(leaf_type=self._domain_config.leaf_type)
+        )
         
         metadata = {
             "game_id": None,  # Will be set by BenchmarkRunner

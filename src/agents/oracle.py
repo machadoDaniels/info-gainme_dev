@@ -11,9 +11,10 @@ from typing import Set
 
 from ..data_types import Answer, Question, OracleResponse
 from ..graph import Node
+from ..domain.types import DomainConfig, GEO_DOMAIN
 from ..prompts import get_oracle_system_prompt
 from .llm_adapter import LLMAdapter
-from ..utils.utils import parse_first_json_object
+from ..utils.utils import llm_final_content
 
 
 class OracleAgent:
@@ -25,12 +26,13 @@ class OracleAgent:
     """
 
     def __init__(
-        self, 
-        llm_adapter: LLMAdapter, 
+        self,
+        llm_adapter: LLMAdapter,
         target_node_id: str,
         *,
-        target_node: Node = None
-        ) -> None:
+        target_node: Node = None,
+        domain_config: DomainConfig | None = None,
+    ) -> None:
         """Initialize the OracleAgent.
         
         Args:
@@ -53,6 +55,7 @@ class OracleAgent:
         self._target_node = target_node  # Store target node for metadata export
         self._answers_given = 0
         
+        self._domain_config = domain_config or GEO_DOMAIN
         # Build system prompt with target information
         system_prompt = self._build_system_prompt_with_target(target_node)
         self._llm_adapter.append_history("system", system_prompt)
@@ -93,6 +96,7 @@ class OracleAgent:
         """
         # Generate answer (expecting JSON response with rationale first)
         response = self._llm_adapter.generate()
+        response = llm_final_content(response)
 
         oracle_response = OracleResponse.model_validate_json(response)
         
@@ -113,14 +117,26 @@ class OracleAgent:
         Returns:
             Complete system prompt with target details.
         """
-        base_prompt = get_oracle_system_prompt()
-        
+        base_prompt = get_oracle_system_prompt(
+            target_noun=self._domain_config.target_noun,
+            domain_description=self._domain_config.domain_description,
+        )
+
         # Add target information to system prompt
-        attrs_str = ""
-        if target_node.attrs:
-            attrs_str = f", {', '.join(f'{k}={v}' for k, v in target_node.attrs.items())}"
-        
-        target_info = f"\n\n## Your Target\n\nID: {target_node.id}\nLabel: {target_node.label}{attrs_str}\n\nThis is the target you know about. Answer all questions truthfully based on this target's properties."
+        attrs_parts = []
+        for k, v in target_node.attrs.items():
+            if k == "aliases" and isinstance(v, (list, tuple)):
+                attrs_parts.append(f"aliases={list(v)}")
+            else:
+                attrs_parts.append(f"{k}={v}")
+        attrs_str = f", {', '.join(attrs_parts)}" if attrs_parts else ""
+        aliases_note = ""
+        if target_node.attrs.get("aliases"):
+            aliases = target_node.attrs["aliases"]
+            if isinstance(aliases, (list, tuple)):
+                aliases_note = f"\nAlso known as (accept these as correct): {', '.join(str(a) for a in aliases)}"
+
+        target_info = f"\n\n## Your Target\n\nID: {target_node.id}\nLabel: {target_node.label}{attrs_str}{aliases_note}\n\nThis is the target you know about. Answer all questions truthfully based on this target's properties. Set game_over=true when the Seeker correctly identifies the target (by label or alias)."
         
         return base_prompt + target_info
 

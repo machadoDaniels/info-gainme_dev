@@ -13,8 +13,23 @@ __pycache__/
 # .pytest_cache
 .pytest_cache/
 
-# Data
-data/
+# Data (exceptions for tracked CSVs)
+data/*
+!data/objects/
+data/objects/*
+!data/objects/*.csv
+!data/objects/README.md
+!data/geo/
+data/geo/*
+!data/geo/top_10_pop_cities.csv
+!data/geo/top_20_pop_cities.csv
+!data/geo/top_40_pop_cities.csv
+!data/geo/cities_pops.csv
+!data/diseases/
+data/diseases/*
+!data/diseases/diseases_full.csv
+!data/diseases/diseases_test.csv
+!data/diseases/README.md
 
 # Output
 output/

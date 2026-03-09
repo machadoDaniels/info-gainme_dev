@@ -161,6 +161,7 @@ class BenchmarkRunner:
                     pruner_config=self.config.pruner_config,
                     observability_mode=self.config.observability_mode,
                     max_turns=self.config.max_turns,
+                    domain_config=self.config.domain_config,
                 )
 
                 orch.run(
