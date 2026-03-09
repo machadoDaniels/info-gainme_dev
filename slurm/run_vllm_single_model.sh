@@ -41,7 +41,8 @@ echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
 
 # cache do HF no /workspace para evitar problemas de permissão no /raid
 export HF_HOME=/workspace/hf-cache
-export HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN:?Defina HUGGING_FACE_HUB_TOKEN antes de rodar}"
+source /raid/user_danielpedrozo/projects/clary_quest/.env
+export HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN:?HUGGING_FACE_HUB_TOKEN não definido no .env}"
 
 # garantir diretórios no /raid (estes serão mapeados para /workspace no container)
 mkdir -p /raid/user_danielpedrozo/projects/clary_quest/logs
