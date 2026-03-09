@@ -118,9 +118,7 @@ class BenchmarkRunner:
 
         completed_runs = self._get_completed_runs(csv_path)
 
-        # Pre-assign game counters so directory names are deterministic
-        work_items: list[tuple[int, Candidate, int]] = []
-        game_counter = len(completed_runs) + 1
+        work_items: list[tuple[Candidate, int]] = []
         skipped_count = 0
 
         for target in targets:
@@ -132,8 +130,7 @@ class BenchmarkRunner:
                         target.label, target.id, run_idx, runs_per_target,
                     )
                     continue
-                work_items.append((game_counter, target, run_idx))
-                game_counter += 1
+                work_items.append((target, run_idx))
 
         total_planned = len(work_items) + skipped_count
 
@@ -145,16 +142,15 @@ class BenchmarkRunner:
 
         csv_lock = threading.Lock()
 
-        def _run_one(game_idx: int, target: Candidate, run_idx: int) -> None:
-            logger.info("[game %d] %s [%s] run %d/%d", game_idx, target.label, target.id, run_idx, runs_per_target)
+        def _run_one(target: Candidate, run_idx: int) -> None:
+            logger.info("%s [%s] run %d/%d", target.label, target.id, run_idx, runs_per_target)
 
             game_pool = copy.deepcopy(pool)
 
-            safe_label = target.label.replace(" ", "_").replace("/", "-")
-            safe_id = target.id.replace(":", "")
+            safe_id = _safe_name(target.id)
             conv_dir = (
                 self._output_dir() / "conversations" /
-                f"game_{game_idx:03d}_{safe_label}_{safe_id}"
+                (f"{safe_id}_run{run_idx:02d}" if runs_per_target > 1 else safe_id)
             )
 
             orch = Orchestrator.from_target(
@@ -177,7 +173,6 @@ class BenchmarkRunner:
                 metadata_path = conv_dir / "metadata.json"
                 if metadata_path.exists():
                     metadata = json.loads(metadata_path.read_text())
-                    metadata["game_id"] = game_idx
                     metadata["config"]["experiment_name"] = self.config.experiment_name
                     metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
 
@@ -214,17 +209,17 @@ class BenchmarkRunner:
                 with csv_path.open("a", newline="") as f:
                     csv.writer(f).writerow(row)
 
-            logger.info("[game %d] done | win=%s | turns=%s", game_idx, bool(win), summary.get("turns"))
+            logger.info("%s done | win=%s | turns=%s", target.label, bool(win), summary.get("turns"))
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(_run_one, gi, t, ri): (gi, t, ri)
-                for gi, t, ri in work_items
+                executor.submit(_run_one, t, ri): (t, ri)
+                for t, ri in work_items
             }
             for future in as_completed(futures):
                 exc = future.exception()
                 if exc:
-                    gi, t, ri = futures[future]
-                    logger.error("[game %d] %s run %d failed: %s", gi, t.label, ri, exc)
+                    t, ri = futures[future]
+                    logger.error("%s run %d failed: %s", t.label, ri, exc)
 
         return csv_path
