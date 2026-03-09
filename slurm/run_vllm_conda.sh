@@ -51,7 +51,7 @@ fi
 
 # cache do HF no /raid para não baixar tudo de novo cada execução
 export HF_HOME=/raid/user_danielpedrozo/hf-cache
-source /raid/user_danielpedrozo/projects/clary_quest/.env
+source /raid/user_danielpedrozo/projects/info-gainme_dev/.env
 export HF_TOKEN="${HF_TOKEN:?HF_TOKEN não definido no .env}"
 export HOME=/raid/user_danielpedrozo/hf-cache
 

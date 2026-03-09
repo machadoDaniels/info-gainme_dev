@@ -35,7 +35,7 @@ export VLLM_LOGGING_LEVEL=DEBUG
 
 # cache do HF no /workspace para evitar problemas de permissão no /raid
 export HF_HOME=/workspace/hf-cache
-source /raid/user_danielpedrozo/projects/clary_quest/.env
+source /raid/user_danielpedrozo/projects/info-gainme_dev/.env
 export HF_TOKEN="${HF_TOKEN:?HF_TOKEN não definido no .env}"
 
 # garantir diretórios no /raid (estes serão mapeados para /workspace no container)

@@ -158,7 +158,7 @@ world_flat_clean = world_flat[[
 ]]
 
 # Filtering top pop cities
-cities_pops = pd.read_csv("/Users/daniels/Documents/AKCIT-RL/clary_quest/data/cities_pops.csv")
+cities_pops = pd.read_csv("/Users/daniels/Documents/AKCIT-RL/info-gainme_dev/data/cities_pops.csv")
 
 # Merge cities_pops with world_flat_clean on world_flat_clean.city_name, world_flat_clean.country_name and cities_pops.city_name, cities_pops.country_name
 top_40_pop_cities = world_flat_clean.merge(
@@ -181,23 +181,23 @@ assert len(top_20_pop_cities) == 20
 assert len(top_10_pop_cities) == 10
 
 # Salva os dados em formato csv
-out_parquet = "/Users/daniels/Documents/AKCIT-RL/clary_quest/data/world_flat.csv"
+out_parquet = "/Users/daniels/Documents/AKCIT-RL/info-gainme_dev/data/world_flat.csv"
 world_flat.to_csv(out_parquet, index=False)
 print(f"Dados salvos em: {out_parquet}")
 
-out_parquet = "/Users/daniels/Documents/AKCIT-RL/clary_quest/data/world_flat_clean.csv"
+out_parquet = "/Users/daniels/Documents/AKCIT-RL/info-gainme_dev/data/world_flat_clean.csv"
 world_flat_clean.to_csv(out_parquet, index=False)
 print(f"Dados salvos em: {out_parquet}")
 
 
-out_parquet = "/Users/daniels/Documents/AKCIT-RL/clary_quest/data/top_40_pop_cities.csv"
+out_parquet = "/Users/daniels/Documents/AKCIT-RL/info-gainme_dev/data/top_40_pop_cities.csv"
 top_40_pop_cities.to_csv(out_parquet, index=False)
 print(f"Dados salvos em: {out_parquet}")
 
-out_parquet = "/Users/daniels/Documents/AKCIT-RL/clary_quest/data/top_20_pop_cities.csv"
+out_parquet = "/Users/daniels/Documents/AKCIT-RL/info-gainme_dev/data/top_20_pop_cities.csv"
 top_20_pop_cities.to_csv(out_parquet, index=False)
 print(f"Dados salvos em: {out_parquet}")
 
-out_parquet = "/Users/daniels/Documents/AKCIT-RL/clary_quest/data/top_10_pop_cities.csv"
+out_parquet = "/Users/daniels/Documents/AKCIT-RL/info-gainme_dev/data/top_10_pop_cities.csv"
 top_10_pop_cities.to_csv(out_parquet, index=False)
 print(f"Dados salvos em: {out_parquet}")

@@ -1,4 +1,4 @@
-"""Utilities module for clary_quest project."""
+"""Utilities module for info-gainme_dev project."""
 
 from .utils import llm_final_content, parse_first_json_object
 from .logger import ClaryLogger

@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=akcit-rl-vllm
-#SBATCH --partition=h100n2  
+#SBATCH --partition=b200n1  
 #SBATCH --gres=gpu:1
 #SBATCH --mem=150G
 #SBATCH --time=12:00:00
-#SBATCH --output=/raid/user_danielpedrozo/projects/clary_quest/logs/%x-%j.out
+#SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
 
 # porta do servidor (interna ao nó)
-export VLLM_PORT=8023
+export VLLM_PORT=8020
 # Configuração do modelo
 # export MODEL="Qwen/Qwen3-30B-A3B-Thinking-2507"
 # export MODEL_NAME="Qwen3-30B-A3B-Thinking-2507"
@@ -41,11 +41,11 @@ echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
 
 # cache do HF no /workspace para evitar problemas de permissão no /raid
 export HF_HOME=/workspace/hf-cache
-source /raid/user_danielpedrozo/projects/clary_quest/.env
+source /raid/user_danielpedrozo/projects/info-gainme_dev/.env
 export HF_TOKEN="${HF_TOKEN:?HF_TOKEN não definido no .env}"
 
 # garantir diretórios no /raid (estes serão mapeados para /workspace no container)
-mkdir -p /raid/user_danielpedrozo/projects/clary_quest/logs
+mkdir -p /raid/user_danielpedrozo/projects/info-gainme_dev/logs
 mkdir -p /raid/user_danielpedrozo/models
 mkdir -p /raid/user_danielpedrozo/hf-cache
 
@@ -112,7 +112,7 @@ start_vllm_server() {
 }
 
 # Iniciar o servidor
-start_vllm_server "${MODEL}" "${MODEL_NAME}" ${VLLM_PORT} ${MODEL_GPU_MEM} ${MODEL_MAX_LEN} "/workspace/projects/clary_quest/logs/${MODEL_NAME}.log" "${MODEL_REASONING_PARSER}"
+start_vllm_server "${MODEL}" "${MODEL_NAME}" ${VLLM_PORT} ${MODEL_GPU_MEM} ${MODEL_MAX_LEN} "/workspace/projects/info-gainme_dev/logs/${MODEL_NAME}.log" "${MODEL_REASONING_PARSER}"
 
 # Aguardar o modelo carregar completamente
 echo "Aguardando carregamento completo do modelo..."
@@ -125,7 +125,7 @@ done
 echo "Servidor foi iniciado em background."
 echo "Aguardando finalização do processo..."
 echo "Para acessar os logs, execute:"
-echo "  tail -f /raid/user_danielpedrozo/projects/clary_quest/logs/${MODEL_NAME}.log"
+echo "  tail -f /raid/user_danielpedrozo/projects/info-gainme_dev/logs/${MODEL_NAME}.log"
 
 # Aguardar o processo terminar
 wait

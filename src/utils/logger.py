@@ -1,4 +1,4 @@
-"""Custom logging utilities for the clary_quest project."""
+"""Custom logging utilities for the info-gainme_dev project."""
 
 from __future__ import annotations
 

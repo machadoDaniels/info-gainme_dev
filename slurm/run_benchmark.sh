@@ -5,15 +5,15 @@
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --ntasks=1
-#SBATCH --output=/raid/user_danielpedrozo/projects/clary_quest/logs/%x-%j.out
-#SBATCH --error=/raid/user_danielpedrozo/projects/clary_quest/logs/%x-%j.err
+#SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
+#SBATCH --error=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.err
 
 # ===============================================
 # CONFIGURAÇÃO
 # ===============================================
 BENCHMARK_CONFIG="${BENCHMARK_CONFIG:-benchmark_config.yaml}"
 
-PROJECT_DIR="/raid/user_danielpedrozo/projects/clary_quest"
+PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm-openai_latest.sif"
 
 # ===============================================
@@ -30,7 +30,7 @@ echo "=========================================="
 singularity exec \
     --bind /raid/user_danielpedrozo:/workspace \
     --bind "/usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/local/cuda/compat/lib/libcuda.so.1" \
-    --pwd /workspace/projects/clary_quest \
+    --pwd /workspace/projects/info-gainme_dev \
     "${SINGULARITY_IMAGE}" \
     /usr/bin/python3 benchmark_runner.py --config "${BENCHMARK_CONFIG}"
 

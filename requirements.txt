@@ -1,4 +1,4 @@
-# Core dependencies for clary_quest project
+# Core dependencies for info-gainme_dev project
 # AI/ML and API dependencies
 openai>=1.0.0
 python-dotenv>=1.0.0
