@@ -38,7 +38,7 @@ game:
   max_turns: 30
 
 dataset:
-  csv_path: "data/top_40_pop_cities.csv"
+  csv_path: "data/geo/top_40_pop_cities.csv"
   num_targets: null  # null = all targets
   runs_per_target: 3
 
