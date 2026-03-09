@@ -6,6 +6,7 @@ Supports both geographic (geo) and flat object/disease datasets via dataset.type
 
 import argparse
 import logging
+from datetime import datetime
 from os import getenv
 from pathlib import Path
 from dotenv import load_dotenv
@@ -48,7 +49,7 @@ def main() -> None:
     runs_per_target = dataset_cfg.get("runs_per_target", 1)
     output_base = Path(config["output"]["base_dir"])
 
-    log_file = output_base / "logs" / f"{benchmark_config.experiment_name}.log"
+    log_file = output_base / "logs" / f"{benchmark_config.experiment_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     setup_logging(log_file=log_file)
 
     if dataset_type == "objects":
