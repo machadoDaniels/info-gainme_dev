@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=akcit-rl-vllm
-#SBATCH --partition=b200n1  
-#SBATCH --gres=gpu:1
+#SBATCH --partition=h100n2  
+#SBATCH --gres=gpu:4
 #SBATCH --mem=150G
 #SBATCH --time=12:00:00
 #SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
@@ -38,6 +38,7 @@ export VLLM_LOGGING_LEVEL=DEBUG
 
 
 echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
+echo "SLURM_GPUS_ON_NODE: ${SLURM_GPUS_ON_NODE}"
 
 # cache do HF no /workspace para evitar problemas de permissão no /raid
 export HF_HOME=/workspace/hf-cache
@@ -66,6 +67,11 @@ echo "Depois acesse:"
 echo "  http://localhost:LOCAL_PORT/v1/models (${MODEL_NAME})"
 echo "=========================================="
 
+# Matar qualquer processo usando a porta antes de iniciar
+echo "Verificando se a porta ${VLLM_PORT} está em uso..."
+fuser -k ${VLLM_PORT}/tcp 2>/dev/null && echo "Processo anterior na porta ${VLLM_PORT} encerrado." || echo "Porta ${VLLM_PORT} está livre."
+sleep 2
+
 # Iniciar o servidor vLLM
 echo "Iniciando servidor para ${MODEL_NAME} na porta ${VLLM_PORT}..."
 
@@ -78,7 +84,7 @@ vllm_cmd="/usr/bin/python3 -m vllm.entrypoints.openai.api_server \
   --host 0.0.0.0 \
   --gpu-memory-utilization ${MODEL_GPU_MEM} \
   --max-num-seqs 32 \
-  --tensor-parallel-size 1 \
+  --tensor-parallel-size ${SLURM_GPUS_ON_NODE} \
   --max-model-len ${MODEL_MAX_LEN}"
 
 # Adicionar reasoning_parser se fornecido
