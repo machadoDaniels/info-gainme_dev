@@ -10,7 +10,7 @@
 # ===============================================
 # CONFIGURAÇÃO
 # ===============================================
-BENCHMARK_CONFIG="${1:-${BENCHMARK_CONFIG:-benchmark_config.yaml}}"
+BENCHMARK_CONFIG="${1:-${BENCHMARK_CONFIG:-configs/geo_full_no_cot.yaml}}"
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm_openai_latest.sif"

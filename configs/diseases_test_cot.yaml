@@ -1,5 +1,5 @@
 # Benchmark Configuration - Diseases Dataset (773 diseases)
-# Run: python benchmark_runner.py --config benchmark_config_diseases_cot.yaml
+# Run: python benchmark_runner.py --config configs/diseases_test_cot.yaml
 # Preprocess first: python scripts/prepare_diseases_csv.py
 
 models:
@@ -7,10 +7,6 @@ models:
     model: "Qwen3-8B"
     base_url: "http://localhost:8020/v1"
     timeout: 120.0
-    extra_body:
-      chat_template_kwargs: 
-        enable_thinking: true
-
 
   oracle:
     model: "Qwen3-8B"

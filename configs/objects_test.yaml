@@ -1,5 +1,5 @@
 # Benchmark Configuration - Objects (quick test, 34 objects)
-# Run: python benchmark_runner.py --config benchmark_config_objects_test.yaml
+# Run: python benchmark_runner.py --config configs/objects_test.yaml
 
 models:
   seeker:

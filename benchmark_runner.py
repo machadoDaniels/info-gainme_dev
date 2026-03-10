@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Run the full benchmark experiment."""
     parser = argparse.ArgumentParser(description="Run benchmark experiments")
-    parser.add_argument("--config", type=Path, default="benchmark_config.yaml")
+    parser.add_argument("--config", type=Path, default="configs/geo_full_no_cot.yaml")
     args = parser.parse_args()
 
     load_dotenv()

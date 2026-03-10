@@ -1,5 +1,5 @@
 # Benchmark Configuration - Diseases Dataset (773 diseases)
-# Run: python benchmark_runner.py --config benchmark_config_diseases_no_cot.yaml
+# Run: python benchmark_runner.py --config configs/diseases_full_no_cot.yaml
 # Preprocess first: python scripts/prepare_diseases_csv.py
 
 models:

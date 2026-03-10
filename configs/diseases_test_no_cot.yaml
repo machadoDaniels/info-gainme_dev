@@ -1,5 +1,5 @@
 # Benchmark Configuration - Diseases Test (40 diseases, quick runs)
-# Run: python benchmark_runner.py --config benchmark_config_diseases_test.yaml
+# Run: python benchmark_runner.py --config configs/diseases_test_no_cot.yaml
 
 models:
   seeker:

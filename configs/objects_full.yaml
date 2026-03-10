@@ -1,5 +1,5 @@
 # Benchmark Configuration - Flat Objects Dataset (all 158 objects)
-# Run: python benchmark_runner.py --config benchmark_config_objects.yaml
+# Run: python benchmark_runner.py --config configs/objects_full.yaml
 
 models:
   seeker:
