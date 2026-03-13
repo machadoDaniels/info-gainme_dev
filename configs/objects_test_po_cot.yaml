@@ -1,27 +1,27 @@
-# Benchmark Configuration - Objects (quick test, 34 objects)
-# Run: python benchmark_runner.py --config configs/objects_test_cot.yaml
+# Benchmark Configuration - Objects Test (34 objects, PO + COT)
+# Run: python benchmark_runner.py --config configs/objects_test_po_cot.yaml
+
 models:
   seeker:
     model: "Qwen3-8B"
-    base_url: "http://localhost:8020/v1"
+    base_url: "http://10.100.0.121:8020/v1"
     timeout: 120.0
     extra_body:
       chat_template_kwargs:
         enable_thinking: true
-    use_reasoning: true
 
   oracle:
     model: "Qwen3-8B"
-    base_url: "http://localhost:8020/v1"
+    base_url: "http://10.100.0.121:8020/v1"
     timeout: 120.0
 
   pruner:
     model: "Qwen3-8B"
-    base_url: "http://localhost:8020/v1"
+    base_url: "http://10.100.0.121:8020/v1"
     timeout: 120.0
 
 game:
-  observability_mode: "FULLY_OBSERVABLE"
+  observability_mode: "PARTIALLY_OBSERVABLE"
   max_turns: 25
 
 dataset:
@@ -31,8 +31,8 @@ dataset:
   runs_per_target: 1
 
 experiment:
-  name: "objects_test_cot"
-  max_workers: 8
+  name: "objects_test_po_cot"
+  max_workers: 12
 
 output:
   base_dir: "outputs"

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv diseases_test_cot.yaml diseases_test_po_cot.yaml)",
+      "Bash(mv diseases_test_no_cot.yaml diseases_test_po_no_cot.yaml)"
+    ]
+  }
+}

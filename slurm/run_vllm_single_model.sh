@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=akcit-rl-vllm
 #SBATCH --partition=h100n2  
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:1
 #SBATCH --mem=150G
 #SBATCH --time=12:00:00
 #SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out

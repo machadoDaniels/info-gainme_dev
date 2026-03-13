@@ -3,16 +3,24 @@
 
 models:
   seeker:
-    model: "gpt-4o-mini"
-    timeout: 60.0
+    model: "Qwen3-8B"
+    base_url: "http://10.100.0.121:8020/v1"
+    timeout: 120.0
+    extra_body:
+      chat_template_kwargs: 
+        enable_thinking: false
 
   oracle:
-    model: "gpt-4o-mini"
-    timeout: 30.0
+    model: "Qwen3-8B"
+    base_url: "http://10.100.0.121:8020/v1"
+    timeout: 120.0
+
 
   pruner:
-    model: "gpt-4o-mini"
-    timeout: 30.0
+    model: "Qwen3-8B"
+    base_url: "http://10.100.0.121:8020/v1"
+    timeout: 120.0
+
 
 game:
   observability_mode: "PARTIALLY_OBSERVABLE"
@@ -25,8 +33,8 @@ dataset:
   runs_per_target: 1
 
 experiment:
-  name: "diseases_test_po"
-  max_workers: 8
+  name: "diseases_test_po_no_cot"
+  max_workers: 12
 
 output:
   base_dir: "outputs"

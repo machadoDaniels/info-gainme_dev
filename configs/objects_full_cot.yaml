@@ -32,7 +32,7 @@ dataset:
 
 experiment:
   name: "objects_full_cot"
-  max_workers: 8
+  max_workers: 12
 
 output:
   base_dir: "outputs"

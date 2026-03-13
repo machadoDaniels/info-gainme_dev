@@ -31,7 +31,7 @@ dataset:
 
 experiment:
   name: "top40_po_cot"
-  max_workers: 4
+  max_workers: 12
   tags: {}
 
 output:

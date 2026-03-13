@@ -47,7 +47,7 @@ experiment:
   name: "top40_po_no_cot"
   # name: "top40_fo_no_cot"
   # name: "top40_po"
-  max_workers: 4
+  max_workers: 12
 
   tags: {}
 

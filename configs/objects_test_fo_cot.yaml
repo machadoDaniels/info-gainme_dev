@@ -1,22 +1,19 @@
-# Benchmark Configuration - Diseases Dataset (773 diseases)
-# Run: python benchmark_runner.py --config configs/diseases_full_cot_remote.yaml
-# Preprocess first: python scripts/prepare_diseases_csv.py
-
+# Benchmark Configuration - Objects Test (34 objects, FO + COT)
+# Run: python benchmark_runner.py --config configs/objects_test_fo_cot.yaml
 models:
   seeker:
     model: "Qwen3-8B"
     base_url: "http://10.100.0.121:8020/v1"
     timeout: 120.0
     extra_body:
-      chat_template_kwargs: 
+      chat_template_kwargs:
         enable_thinking: true
-
+    use_reasoning: true
 
   oracle:
     model: "Qwen3-8B"
     base_url: "http://10.100.0.121:8020/v1"
     timeout: 120.0
-
 
   pruner:
     model: "Qwen3-8B"
@@ -24,17 +21,17 @@ models:
     timeout: 120.0
 
 game:
-  observability_mode: "PARTIALLY_OBSERVABLE"
+  observability_mode: "FULLY_OBSERVABLE"
   max_turns: 25
 
 dataset:
-  type: "diseases"
-  csv_path: "data/diseases/diseases_full.csv"
+  type: "objects"
+  csv_path: "data/objects/objects_test.csv"
   num_targets: null
   runs_per_target: 1
 
 experiment:
-  name: "diseases_full_po_cot"
+  name: "objects_test_fo_cot"
   max_workers: 12
 
 output:
