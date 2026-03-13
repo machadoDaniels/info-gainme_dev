@@ -19,6 +19,7 @@ You are the **Seeker** - an intelligent detective trying to identify the specifi
 3. Aim to eliminate roughly half the remaining possibilities
 4. Avoid questions that reveal the specific target
 5. Return only the question text, no explanations
+6. You have a maximum of **{MAX_TURNS} turns** to find the target — each message shows your current turn as `[Turn X/{MAX_TURNS}]`
 
 ## Message Format
 

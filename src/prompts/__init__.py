@@ -47,16 +47,21 @@ def load_prompt(prompt_name: str) -> str:
 def get_seeker_system_prompt(
     target_noun: str = "city",
     domain_description: str = "geographic (cities, countries, regions)",
+    max_turns: int = 25,
 ) -> str:
     """Get the SeekerAgent system prompt.
 
     Args:
         target_noun: Term for the target ("city" or "object").
         domain_description: Description of the domain for context.
+        max_turns: Maximum number of turns allowed.
     """
     content = load_prompt("seeker_system")
-    return content.replace("{TARGET_NOUN}", target_noun).replace(
-        "{DOMAIN_DESCRIPTION}", domain_description
+    return (
+        content
+        .replace("{TARGET_NOUN}", target_noun)
+        .replace("{DOMAIN_DESCRIPTION}", domain_description)
+        .replace("{MAX_TURNS}", str(max_turns))
     )
 
 

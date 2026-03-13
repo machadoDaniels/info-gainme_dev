@@ -33,6 +33,7 @@ data/diseases/*
 
 # Output
 output/
+output*/
 
 # Logs
 logs/
