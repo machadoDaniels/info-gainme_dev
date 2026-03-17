@@ -13,10 +13,12 @@ umask 002
 # ===============================================
 # CONFIGURAÇÃO
 # ===============================================
-BENCHMARK_CONFIG="${1:-${BENCHMARK_CONFIG:-configs/8b/geo_full_no_cot.yaml}}"
 SHARED_GROUP="sd22"
-
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
+
+# Normaliza para path relativo ao PROJECT_DIR (compatível com Singularity)
+_RAW="${1:-${BENCHMARK_CONFIG:-configs/8b/geo_full_no_cot.yaml}}"
+BENCHMARK_CONFIG="${_RAW#${PROJECT_DIR}/}"
 SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm_openai_latest.sif"
 
 # ===============================================

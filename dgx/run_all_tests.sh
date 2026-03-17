@@ -1,72 +1,46 @@
 #!/bin/bash
-# Submete benchmarks de teste via SLURM
+# Submete benchmarks via SLURM
 #
 # Uso:
-#   ./dgx/run_all_tests.sh                  # submete 8b (padrão)
-#   ./dgx/run_all_tests.sh --model 30b      # submete 30b
-#   ./dgx/run_all_tests.sh --dep 16130      # com dependency=after:16130
-#   ./dgx/run_all_tests.sh --model 30b --dep 16130
+#   ./dgx/run_all_tests.sh configs/8b/diseases_test_po_cot.yaml   # um yaml
+#   ./dgx/run_all_tests.sh configs/30b/cot/                       # pasta inteira
+#   ./dgx/run_all_tests.sh configs/30b/cot/ --dep 16130           # com dependency
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
-MODEL="8b"
 DEPENDENCY=""
+TARGET="${1:-configs/8b}"
 
 # Parse args
+shift || true
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --model) MODEL="$2"; shift 2 ;;
-        --dep)   DEPENDENCY="$2"; shift 2 ;;
-        *)       echo "Arg desconhecido: $1"; exit 1 ;;
+        --dep) DEPENDENCY="$2"; shift 2 ;;
+        *)     echo "Arg desconhecido: $1"; exit 1 ;;
     esac
 done
 
-# Configs por modelo
-declare -A CONFIGS_8B=(
-    [diseases_test_po_cot]="configs/8b/diseases_test_po_cot.yaml"
-    [diseases_test_po_no_cot]="configs/8b/diseases_test_po_no_cot.yaml"
-    [diseases_test_fo_cot]="configs/8b/diseases_test_fo_cot.yaml"
-    [diseases_test_fo_no_cot]="configs/8b/diseases_test_fo_no_cot.yaml"
-    [objects_test_po_cot]="configs/8b/objects_test_po_cot.yaml"
-    [objects_test_po_no_cot]="configs/8b/objects_test_po_no_cot.yaml"
-    [objects_test_fo_cot]="configs/8b/objects_test_fo_cot.yaml"
-    [objects_test_fo_no_cot]="configs/8b/objects_test_fo_no_cot.yaml"
-    [geo_full_cot]="configs/8b/geo_full_cot.yaml"
-    [geo_full_no_cot]="configs/8b/geo_full_no_cot.yaml"
-)
-
-declare -A CONFIGS_30B=(
-    [diseases_test_30b_po_cot]="configs/30b/diseases_test_30b_po_cot.yaml"
-    [diseases_test_30b_po_no_cot]="configs/30b/diseases_test_30b_po_no_cot.yaml"
-    [diseases_test_30b_fo_cot]="configs/30b/diseases_test_30b_fo_cot.yaml"
-    [diseases_test_30b_fo_no_cot]="configs/30b/diseases_test_30b_fo_no_cot.yaml"
-    [objects_test_30b_po_cot]="configs/30b/objects_test_30b_po_cot.yaml"
-    [objects_test_30b_po_no_cot]="configs/30b/objects_test_30b_po_no_cot.yaml"
-    [objects_test_30b_fo_cot]="configs/30b/objects_test_30b_fo_cot.yaml"
-    [objects_test_30b_fo_no_cot]="configs/30b/objects_test_30b_fo_no_cot.yaml"
-    [geo_full_30b_cot]="configs/30b/geo_full_30b_cot.yaml"
-    [geo_full_30b_no_cot]="configs/30b/geo_full_30b_no_cot.yaml"
-)
-
-if [[ "$MODEL" == "30b" ]]; then
-    declare -n CONFIGS=CONFIGS_30B
+# Resolve lista de configs
+if [[ -f "${TARGET}" ]]; then
+    CONFIGS=("${TARGET}")
+elif [[ -d "${TARGET}" ]]; then
+    mapfile -t CONFIGS < <(find "${TARGET}" -maxdepth 1 -name "*.yaml" | sort)
 else
-    declare -n CONFIGS=CONFIGS_8B
+    echo "ERRO: '${TARGET}' não é um arquivo nem pasta válida."
+    exit 1
 fi
 
 SBATCH_ARGS=""
-if [ -n "${DEPENDENCY}" ]; then
-    SBATCH_ARGS="--dependency=after:${DEPENDENCY}"
-fi
+[ -n "${DEPENDENCY}" ] && SBATCH_ARGS="--dependency=after:${DEPENDENCY}"
 
 echo "=========================================="
-echo "Submetendo ${#CONFIGS[@]} benchmarks — modelo: ${MODEL}"
+echo "Submetendo ${#CONFIGS[@]} benchmark(s)"
+echo "Target: ${TARGET}"
 [ -n "${DEPENDENCY}" ] && echo "Dependency: after:${DEPENDENCY}"
 echo "=========================================="
 
-for NAME in "${!CONFIGS[@]}"; do
-    CONFIG="${CONFIGS[$NAME]}"
+for CONFIG in "${CONFIGS[@]}"; do
     JOB_ID=$(sbatch ${SBATCH_ARGS} "${PROJECT_DIR}/dgx/run_benchmark.sh" "${CONFIG}" | awk '{print $4}')
-    echo "  ✓ ${NAME} → job ${JOB_ID}"
+    echo "  ✓ $(basename ${CONFIG}) → job ${JOB_ID}"
 done
 
 echo "=========================================="

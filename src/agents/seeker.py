@@ -59,6 +59,7 @@ class SeekerAgent:
                 target_noun=self._domain_config.target_noun,
                 domain_description=self._domain_config.domain_description,
                 max_turns=self._max_turns,
+                observability_mode=self._observability_mode.value,
             ),
         )
 

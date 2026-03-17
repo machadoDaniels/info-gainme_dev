@@ -48,6 +48,7 @@ def get_seeker_system_prompt(
     target_noun: str = "city",
     domain_description: str = "geographic (cities, countries, regions)",
     max_turns: int = 25,
+    observability_mode: str = "PARTIALLY_OBSERVABLE",
 ) -> str:
     """Get the SeekerAgent system prompt.
 
@@ -55,8 +56,13 @@ def get_seeker_system_prompt(
         target_noun: Term for the target ("city" or "object").
         domain_description: Description of the domain for context.
         max_turns: Maximum number of turns allowed.
+        observability_mode: "FULLY_OBSERVABLE" or "PARTIALLY_OBSERVABLE".
     """
-    content = load_prompt("seeker_system")
+    if observability_mode in ("FULLY_OBSERVABLE", "FO"):
+        prompt_name = "seeker_system_fo"
+    else:
+        prompt_name = "seeker_system_po"
+    content = load_prompt(prompt_name)
     return (
         content
         .replace("{TARGET_NOUN}", target_noun)
