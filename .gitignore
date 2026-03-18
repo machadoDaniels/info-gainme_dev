@@ -27,6 +27,7 @@ data/geo/*
 !data/geo/top_160_pop_cities.csv
 !data/geo/cities_pops.csv
 !data/diseases/
+!data/*.py
 data/diseases/*
 !data/diseases/diseases_full.csv
 !data/diseases/diseases_160.csv
