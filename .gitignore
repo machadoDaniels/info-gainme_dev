@@ -24,10 +24,12 @@ data/geo/*
 !data/geo/top_10_pop_cities.csv
 !data/geo/top_20_pop_cities.csv
 !data/geo/top_40_pop_cities.csv
+!data/geo/top_160_pop_cities.csv
 !data/geo/cities_pops.csv
 !data/diseases/
 data/diseases/*
 !data/diseases/diseases_full.csv
+!data/diseases/diseases_160.csv
 !data/diseases/diseases_test.csv
 !data/diseases/README.md
 
