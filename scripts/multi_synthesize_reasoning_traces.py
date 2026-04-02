@@ -41,7 +41,10 @@ OUTPUTS_BASE = project_root / "outputs"  # project_root já é a raiz do projeto
 
 
 def find_runs_csvs(base_dir: Path) -> list[Path]:
-    return sorted(p for p in base_dir.rglob("runs.csv") if "_cot" in p.parent.name)
+    return sorted(
+        p for p in base_dir.rglob("runs.csv")
+        if p.parent.name.endswith("_cot") or "_cot_" in p.parent.name
+    )
 
 
 def conversation_dirs_from_csv(runs_csv: Path) -> list[Path]:

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=akcit-rl-vllm
-#SBATCH --partition=b200n1  
+#SBATCH --partition=h100n2  
 #SBATCH --gres=gpu:1
 #SBATCH --mem=30G
 #SBATCH --time=12:00:00
@@ -16,8 +16,8 @@ export VLLM_PORT=8022
 # export MODEL_MAX_LEN=140000                  
 
 
-export MODEL="Qwen/Qwen3-30B-A3B-Instruct-2507"
-export MODEL_NAME="Qwen3-30B-A3B-Instruct-2507"
+export MODEL="Qwen/Qwen3-30B-A3B-Thinking-2507"
+export MODEL_NAME="Qwen3-30B-A3B-Thinking-2507"
 export MODEL_GPU_MEM=0.9
 export MODEL_REASONING_PARSER=""           
 export MODEL_MAX_LEN=32000     

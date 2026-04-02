@@ -1,20 +1,20 @@
 #!/bin/bash
 #SBATCH --job-name=vllm_multi_model_1gpu
-#SBATCH --partition=b200n1          
+#SBATCH --partition=h100n2          
 #SBATCH --gres=gpu:1
 #SBATCH --mem=30G
 #SBATCH --time=12:00:00
 #SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
 
 # portas dos servidores (interna ao nó)
-export VLLM_PORT1=8020
-export VLLM_PORT2=8021
+export VLLM_PORT1=8021
+export VLLM_PORT2=8020
  
 
 
 
-export MODEL1="Qwen/Qwen3-30B-A3B-Instruct-2507"
-export MODEL1_NAME="Qwen3-30B-A3B-Instruct-2507"
+export MODEL1="Qwen/Qwen3-4B-Thinking-2507"
+export MODEL1_NAME="Qwen3-4B-Thinking-2507"
 export MODEL1_GPU_MEM=0.6
 export MODEL1_MAX_LEN=32000                
 export MODEL1_REASONING_PARSER=""   
