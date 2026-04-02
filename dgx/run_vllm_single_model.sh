@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=akcit-rl-vllm
-#SBATCH --partition=h100n2  
+#SBATCH --partition=b200n1  
 #SBATCH --gres=gpu:1
-#SBATCH --mem=150G
+#SBATCH --mem=30G
 #SBATCH --time=12:00:00
 #SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
 
 # porta do servidor (interna ao nó)
-export VLLM_PORT=8020
+export VLLM_PORT=8022
 # Configuração do modelo
 # export MODEL="Qwen/Qwen3-30B-A3B-Thinking-2507"
 # export MODEL_NAME="Qwen3-30B-A3B-Thinking-2507"
@@ -16,18 +16,18 @@ export VLLM_PORT=8020
 # export MODEL_MAX_LEN=140000                  
 
 
-# export MODEL="Qwen/Qwen3-30B-A3B-Instruct-2507"
-# export MODEL_NAME="Qwen3-30B-A3B-Instruct-2507"
-# export MODEL_GPU_MEM=0.9
-# export MODEL_REASONING_PARSER=""           
-# export MODEL_MAX_LEN=140000     
-
-
-export MODEL="Qwen/Qwen3-8B"
-export MODEL_NAME="Qwen3-8B"
+export MODEL="Qwen/Qwen3-30B-A3B-Instruct-2507"
+export MODEL_NAME="Qwen3-30B-A3B-Instruct-2507"
 export MODEL_GPU_MEM=0.9
-export MODEL_REASONING_PARSER="qwen3"           # Parser de reasoning opcional (ex: "o1", "qwen", etc.)
-export MODEL_MAX_LEN=32000   
+export MODEL_REASONING_PARSER=""           
+export MODEL_MAX_LEN=32000     
+
+
+# export MODEL="Qwen/Qwen3-8B"
+# export MODEL_NAME="Qwen3-8B"
+# export MODEL_GPU_MEM=0.9
+# export MODEL_REASONING_PARSER="qwen3"           # Parser de reasoning opcional (ex: "o1", "qwen", etc.)
+# export MODEL_MAX_LEN=32000   
 
 
 
