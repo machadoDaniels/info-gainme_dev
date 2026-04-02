@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -83,7 +84,14 @@ def process_runs_csv(runs_csv: Path, llm_config: LLMConfig, max_workers: int) ->
     ok = skip = fail = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(process_conversation, d, llm_config): d for d in conv_dirs}
-        for future in as_completed(futures):
+        bar = tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc=f"Sintetizando [{experiment}]",
+            unit="conv",
+            leave=True,
+        )
+        for future in bar:
             _, success, msg = future.result()
             if not success:
                 fail += 1
@@ -92,6 +100,7 @@ def process_runs_csv(runs_csv: Path, llm_config: LLMConfig, max_workers: int) ->
                 skip += 1
             else:
                 ok += 1
+            bar.set_postfix(ok=ok, skip=skip, fail=fail, refresh=True)
 
     logger.info("  ✅ %d gerados | ⏭️  %d skip | ❌ %d erros", ok, skip, fail)
 
@@ -118,7 +127,7 @@ def main() -> None:
     if args.all:
         runs_csvs = find_runs_csvs(OUTPUTS_BASE)
         logger.info("🔎 %d runs.csv encontrados", len(runs_csvs))
-        for runs_csv in runs_csvs:
+        for runs_csv in tqdm(runs_csvs, desc="Experimentos (runs.csv)", unit="exp"):
             process_runs_csv(runs_csv, llm_config, args.workers)
     else:
         process_runs_csv(args.runs, llm_config, args.workers)
