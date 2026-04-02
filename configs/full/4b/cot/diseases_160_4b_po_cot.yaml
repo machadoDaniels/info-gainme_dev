@@ -3,7 +3,7 @@
 
 models:
   seeker:
-    model: "Qwen3-4B"
+    model: "Qwen3-4B-Thinking-2507"-Thinking-2507"
     timeout: 120.0
     extra_body:
       chat_template_kwargs:
