@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=vllm_multi_model_1gpu
+#SBATCH --job-name=akcit-rl-vllm-multi-model
 #SBATCH --partition=h100n2          
 #SBATCH --gres=gpu:1
 #SBATCH --mem=30G
