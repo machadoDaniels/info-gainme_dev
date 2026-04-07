@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=vllm_multi_model_1gpu
+#SBATCH --job-name=akcit-rl-vllm-multi-model
 #SBATCH --partition=h100n2          
 #SBATCH --gres=gpu:1
 #SBATCH --mem=30G
@@ -7,20 +7,20 @@
 #SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
 
 # portas dos servidores (interna ao nó)
-export VLLM_PORT1=8020
-export VLLM_PORT2=8021
+export VLLM_PORT1=8025
+export VLLM_PORT2=8026
  
 
 
 
-export MODEL1="Qwen/Qwen3-8B"
-export MODEL1_NAME="Qwen3-8B"
+export MODEL1="Qwen/Qwen3-0.6B"
+export MODEL1_NAME="Qwen3-0.6B"
 export MODEL1_GPU_MEM=0.6
 export MODEL1_MAX_LEN=32000                
 export MODEL1_REASONING_PARSER=""   
 
-export MODEL2="Qwen/Qwen3-4B-Thinking-2507"
-export MODEL2_NAME="Qwen3-4B-Thinking-2507"
+export MODEL2="Qwen/Qwen3-4B-Instruct-2507"
+export MODEL2_NAME="Qwen3-4B-Instruct-2507"
 export MODEL2_GPU_MEM=0.35
 export MODEL2_REASONING_PARSER=""           
 export MODEL2_MAX_LEN=32000                 
@@ -43,7 +43,7 @@ export LOGS_DIR="/workspace/projects/info-gainme_dev/logs"
 
 
 # garantir diretórios no /raid (estes serão mapeados para /workspace no container)
-mkdir -p ${LOGS_DIR}
+mkdir -p /raid/user_danielpedrozo/projects/info-gainme_dev/logs
 mkdir -p /raid/user_danielpedrozo/hf-cache
 
 # Verificar GPUs disponíveis
@@ -101,13 +101,13 @@ start_vllm_server() {
          --nv \
          --bind /raid/user_danielpedrozo:/workspace \
          --bind "/usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/local/cuda/compat/lib/libcuda.so.1" \
+         --bind /dev/shm:/dev/shm \
          --pwd /workspace \
          --env HF_TOKEN=${HF_TOKEN} \
          --env VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL} \
-         --env HOME=/workspace \
          --env HF_HOME=${HF_HOME} \
-         /raid/user_danielpedrozo/images/vllm-openai_latest.sif \
-         bash -c "mkdir -p ${dir_name} && ${vllm_cmd} > ${log_file} 2>&1" &
+         /raid/user_danielpedrozo/images/vllm_openai_latest.sif \
+         sh -c "mkdir -p ${dir_name} && ${vllm_cmd} > ${log_file} 2>&1" &
     
     echo "PID do processo ${served_name}: $!"
 }
