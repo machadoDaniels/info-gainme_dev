@@ -32,11 +32,13 @@ else
 fi
 echo "=========================================="
 
-singularity exec \
-    --bind /raid/user_danielpedrozo:/workspace \
-    --pwd /workspace/projects/info-gainme_dev \
-    "${SINGULARITY_IMAGE}" \
-    bash -c "${SYNTHESIS_CMD}"
+sg sd22 -c "
+    singularity exec \
+        --bind /raid/user_danielpedrozo:/workspace \
+        --pwd /workspace/projects/info-gainme_dev \
+        '${SINGULARITY_IMAGE}' \
+        bash -c \"${SYNTHESIS_CMD}\"
+"
 
 echo "=========================================="
 echo "Síntese finalizada - $(date)"

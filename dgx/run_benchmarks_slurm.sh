@@ -2,8 +2,8 @@
 # Executa benchmarks via screen
 #
 # Uso:
-#   ./dgx/run_all_tests.sh configs/8b/diseases_test_po_cot.yaml   # um yaml
-#   ./dgx/run_all_tests.sh configs/30b/cot/                       # pasta inteira
+#   ./dgx/run_benchmarks_slurm.sh configs/8b/diseases_test_po_cot.yaml   # um yaml
+#   ./dgx/run_benchmarks_slurm.sh configs/30b/cot/                       # pasta inteira
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 TARGET="${1:-configs/8b}"

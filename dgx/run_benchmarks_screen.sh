@@ -2,8 +2,8 @@
 # Roda benchmarks sequencialmente via screen (sem SLURM)
 #
 # Uso:
-#   bash dgx/run_screen.sh configs/full/8b/
-#   bash dgx/run_screen.sh configs/full/8b/geo_160_8b_fo_cot.yaml
+#   bash dgx/run_benchmarks_screen.sh configs/full/8b/
+#   bash dgx/run_benchmarks_screen.sh configs/full/8b/geo_160_8b_fo_cot.yaml
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm_openai_latest.sif"
