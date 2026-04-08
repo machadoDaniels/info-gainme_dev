@@ -25,6 +25,7 @@ def main() -> None:
     """Run the full benchmark experiment."""
     parser = argparse.ArgumentParser(description="Run benchmark experiments")
     parser.add_argument("--config", type=Path, default="configs/geo_full_no_cot.yaml")
+    parser.add_argument("--servers-override", type=Path, default=None, help="Path to servers override YAML file")
     args = parser.parse_args()
 
     load_dotenv()
@@ -36,7 +37,7 @@ def main() -> None:
         return
 
     try:
-        benchmark_config, config = load_benchmark_config(args.config, api_key)
+        benchmark_config, config = load_benchmark_config(args.config, api_key, args.servers_override)
     except Exception as e:
         setup_logging()
         logger.error("Error loading configuration: %s", e)

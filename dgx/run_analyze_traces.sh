@@ -1,5 +1,6 @@
 #!/bin/bash
 # Analisa todos os seeker_traces.json e extrai insights agregados.
+# Também gera unified_experiments.csv e model_summary.csv (métricas por modelo + Avg Q/Turn dos traces).
 # Uso:
 #   ./dgx/run_analyze_traces.sh              # usa outputs/ padrão
 #   ./dgx/run_analyze_traces.sh path/outputs # usa diretório customizado
@@ -24,6 +25,8 @@ sg "${SHARED_GROUP}" -c "
         '${SINGULARITY_IMAGE}' \
         bash -c \"
             pip install --user -r requirements.txt 2>/dev/null
+            python3 scripts/generate_unified_csv.py '${OUTPUTS_DIR}'
+            python3 scripts/generate_model_summary_csv.py '${OUTPUTS_DIR}'
             python3 scripts/analyze_reasoning_traces.py '${OUTPUTS_DIR}'
         \"
 "

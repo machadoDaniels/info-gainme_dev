@@ -12,55 +12,117 @@ Info Gainme is a benchmark that measures **information gain** in LLM conversatio
 
 Information gain is Shannon entropy reduction: `H = log2(N)` where N is the number of active candidates. The benchmark records win rate, total IG, avg IG/turn, and compliance rate.
 
-## Running benchmarks
+## Development setup
 
-**Single config (directly, without SLURM):**
+**Python version:** `.python-version` specifies the required Python version (currently 3.11).
+
+**Dependencies:** Install via pip or `uv`:
+```bash
+pip install -r requirements.txt
+# or with uv:
+uv pip install -r requirements.txt
+```
+
+**Environment:** Create a `.env` file with:
+```
+OPENAI_API_KEY=sk-...  # Required even for local vLLM endpoints
+```
+
+## Local testing & debugging
+
+**Run a single game** to test locally:
+```bash
+python3 demo_single_game.py                    # generic test
+python3 demo_objects_game.py                   # objects domain
+python3 demo_diseases_game.py                  # diseases domain
+```
+
+These demos use a small subset of candidates and don't require large-scale infrastructure. Useful for testing agent logic or configs.
+
+**Run a single benchmark config:**
 ```bash
 python3 benchmark_runner.py --config configs/full/8b/geo_160_8b_fo_cot.yaml
 ```
 
-**Multiple configs via screen (preferred on DGX):**
+Results write to `outputs/` and are resumable — re-running the same config skips completed `(target_id, run_index)` pairs.
+
+## Running benchmarks
+
+**Automated (recommended): Single SLURM job with vLLM + benchmarks**
+
+Start vLLM and run all configs in one job:
 ```bash
+sbatch dgx/run_full_benchmark.sh configs/full/4b/                  # all 4b configs
+sbatch dgx/run_full_benchmark.sh configs/full/4b/cot/geo_160_4b_thinking_fo_cot.yaml  # single config
+```
+
+This script:
+1. Allocates N GPUs (one per model)
+2. Starts vLLM servers in background (with automatic readiness polling)
+3. Updates `configs/servers.yaml` with the real node IP
+4. Runs all configs from the given folder sequentially
+5. Kills vLLM when done
+
+Models are configurable at the top of `dgx/run_full_benchmark.sh`. Default: 4B-Thinking (seeker) + 8B (oracle/pruner).
+
+Monitor with: `watch squeue -u $USER` and `tail -f logs/info-gainme-full-<JOBID>.out`
+
+**Manual vLLM + screen (alternative):**
+```bash
+sbatch dgx/run_vllm_single_model.sh
 screen -dmS benchmarks bash -c 'bash dgx/run_benchmarks_screen.sh configs/full/8b/ 2>&1 | tee logs/screen-8b-all.out; exec bash'
-screen -r benchmarks
 ```
 
-**Via SLURM (may sit in queue due to Priority):**
+**Single config locally (for testing):**
 ```bash
-bash dgx/run_benchmarks_slurm.sh configs/full/8b/          # whole folder
-bash dgx/run_benchmarks_slurm.sh configs/full/8b/geo.yaml  # single config
+python3 benchmark_runner.py --config configs/full/8b/geo_160_8b_fo_cot.yaml
 ```
 
-Benchmarks are **resumable** — completed `(target_id, run_index)` pairs are detected from `runs.csv` and skipped automatically.
+**Resumability:** Benchmarks detect completed `(target_id, run_index)` pairs from the existing `runs.csv` and skip them automatically. Useful for recovering from crashes or extending a partial run. The `BenchmarkRunner` reads `runs.csv`, filters targets that haven't been fully run, and continues where it left off. To restart from scratch, remove or rename the output directory.
 
 ## Analysis pipeline
 
 Run in order after benchmarks finish:
 
+**Step 1: Compute experiment metrics**
 ```bash
-# 1. Compute metrics per experiment + unified CSV
-bash dgx/run_analyze_results.sh
-# or for a specific CSV:
-bash dgx/run_analyze_results.sh outputs/models/.../runs.csv
-
-# 2. Synthesize reasoning traces (CoT experiments only)
-bash dgx/run_synthesize_traces.sh
-# With a local model instead of gpt-4o-mini:
-MODEL=Qwen3-8B BASE_URL=http://localhost:8020/v1 bash dgx/run_synthesize_traces.sh
-
-# 3. Analyze reasoning traces
-bash dgx/run_analyze_traces.sh
+bash dgx/run_analyze_results.sh                         # all experiments in outputs/
+bash dgx/run_analyze_results.sh outputs/models/.../runs.csv  # specific CSV
 ```
+Outputs: `summary.json` (metrics: win rate, avg IG, turns), `variance.json` (per-target variance), and `outputs/unified_experiments.csv` (all experiments merged).
 
-`dgx/run_analysis.sh` is a shortcut for step 1 only (runs `analyze_results.py --all` + `generate_unified_csv.py` inside Singularity).
+**Step 2: Synthesize reasoning traces** (CoT experiments only)
+```bash
+bash dgx/run_synthesize_traces.sh                                          # use gpt-4o-mini
+MODEL=Qwen3-8B BASE_URL=http://localhost:8020/v1 bash dgx/run_synthesize_traces.sh  # local model
+```
+For each CoT game, extracts `<think>` blocks from `seeker.json` and synthesizes structured reasoning (options considered, choice rationale) via LLM. Idempotent — skips if `seeker_traces.json` exists. Output: `seeker_traces.json` per conversation.
+
+**Step 3: Analyze reasoning traces**
+```bash
+bash dgx/run_analyze_traces.sh                  # default outputs/
+bash dgx/run_analyze_traces.sh /custom/outputs  # custom directory
+```
+Aggregates all `seeker_traces.json` (CoT only) to generate `reasoning_traces_analysis.json` with question frequency, decision patterns, and per-model aggregations.
 
 ## Configuration
 
-**Experiment configs** live in `configs/full/<model>/`. Each YAML specifies models for all three agents, observability mode (FO/PO), dataset, and experiment name.
+**Experiment configs** live in `configs/full/<model>/` as YAML files. Each specifies:
+- Models for seeker, oracle, pruner (agent LLM configs)
+- Dataset type (`geo`, `objects`, `diseases`) and CSV path
+- Observability mode (`FULLY_OBSERVABLE` / `PARTIALLY_OBSERVABLE`)
+- Experiment name (used in output folder naming)
 
-**Server endpoints** are centralized in `configs/servers.yaml` — model name → base URL. `config_loader.py` walks up from any config file to find this file automatically. **Never hardcode URLs in individual configs.**
+**Server endpoints:** Centralized in `configs/servers.yaml` (model name → vLLM URL). `config_loader.py` walks up from any config file to find this automatically. **Never hardcode URLs in individual configs.** Update `servers.yaml` when vLLM endpoints move.
 
-**CoT vs no-CoT** is controlled by `extra_body.chat_template_kwargs.enable_thinking: true` + `use_reasoning: true` on the seeker. No-CoT configs omit both fields entirely.
+**CoT (Chain-of-Thought):** Enabled on the seeker via:
+```yaml
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: true
+use_reasoning: true
+```
+No-CoT configs omit both fields entirely.
 
 **Observability modes:**
 - `FULLY_OBSERVABLE` — Seeker sees the full candidate list each turn
@@ -119,6 +181,15 @@ scripts/
 
 **Question-choice evaluation** (post-hoc, CoT only): `scripts/evaluate_all_seeker_choices.py` reads a `runs.csv`, finds conversations with `seeker_traces.json`, then for each turn re-runs Oracle+Pruner on every question the Seeker considered to compute counterfactual info gains. Results saved as `question_evaluation.json` per conversation and `question_evaluations_summary.json` per experiment. This pipeline is read-only — it never modifies turns or conversation files.
 
+## Utility scripts
+
+**Post-processing & data maintenance:**
+- `synthesize_from_runs_csv.py` — batch synthesize reasoning traces from runs.csv with custom settings (alternative to `run_synthesize_traces.sh`)
+- `remove_duplicates_runs.py` — remove duplicate rows from runs.csv by `(target_id, run_index)` pair
+- `scripts/evaluate_seeker_choices.py` — evaluate a single conversation's question choices (debug-friendly version of batch evaluator)
+- `scripts/delete_evaluations_with_connection_errors.py` — clean up failed evaluation runs
+- `scripts/recalculate_question_evaluation_se.py` — recalculate standard error for existing evaluations
+
 ## Output structure
 
 ```
@@ -138,8 +209,16 @@ outputs/
 
 ## Infrastructure
 
-- Models served via **vLLM** with OpenAI-compatible API
-- Runs inside **Singularity** container (`vllm_openai_latest.sif`) on DGX H100 nodes
-- Shared group `sd22` — scripts use `sg sd22 -c "..."` for file permission inheritance
-- `configs/servers.yaml` maps model names to current vLLM endpoint URLs (update here when IPs/ports change)
-- `OPENAI_API_KEY` must be set in `.env` (required even for local vLLM endpoints)
+**Compute:**
+- Models served via **vLLM** (OpenAI-compatible API)
+- Benchmarks & analysis run inside **Singularity** container (`vllm_openai_latest.sif`)
+- Typically on DGX H100 nodes with `OPENAI_API_KEY` in `.env`
+
+**File permissions:**
+- Shared group `sd22` — scripts wrap commands with `sg sd22 -c "..."` to ensure files created by Singularity are group-writable
+- Output files inherit group permissions for collaborative access
+
+**Server configuration:**
+- `configs/servers.yaml` maps model names to vLLM endpoint URLs
+- Update here when endpoints move (IP/port changes)
+- Do not hardcode URLs in individual experiment configs
