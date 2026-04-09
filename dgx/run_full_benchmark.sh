@@ -116,7 +116,7 @@ start_vllm_server() {
     echo "$!"
 }
 
-PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR}/vllm-${SLURM_JOB_ID}-${MODEL1_NAME}.log" "${MODEL1_REASONING_PARSER}")
+PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL1_NAME}.log" "${MODEL1_REASONING_PARSER}")
 while ! curl -s http://localhost:${MODEL1_PORT}/v1/models > /dev/null 2>&1; do sleep 5; done
 echo "✓ ${MODEL1_NAME} ready"
 echo ""
@@ -124,7 +124,7 @@ echo ""
 # Start second model only in dual mode
 PID2=""
 if [ "${MODE}" = "dual" ]; then
-    PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR}/vllm-${SLURM_JOB_ID}-${MODEL2_NAME}.log" "${MODEL2_REASONING_PARSER}")
+    PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL2_NAME}.log" "${MODEL2_REASONING_PARSER}")
     while ! curl -s http://localhost:${MODEL2_PORT}/v1/models > /dev/null 2>&1; do sleep 5; done
     echo "✓ ${MODEL2_NAME} ready"
     echo ""
