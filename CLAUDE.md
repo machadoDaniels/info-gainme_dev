@@ -14,7 +14,7 @@ Information gain is Shannon entropy reduction: `H = log2(N)` where N is the numb
 
 ## Development setup
 
-**Python version:** `.python-version` specifies the required Python version (currently 3.11).
+**Python version:** `pyproject.toml` requires Python ≥3.12.
 
 **Dependencies:** Install via pip or `uv`:
 ```bash
@@ -26,7 +26,12 @@ uv pip install -r requirements.txt
 **Environment:** Create a `.env` file with:
 ```
 OPENAI_API_KEY=sk-...  # Required even for local vLLM endpoints
+HF_TOKEN=hf_...        # Required for vLLM to download models from HuggingFace
 ```
+
+## Testing
+
+There is no automated test suite. Validate changes manually using the demo scripts (see below).
 
 ## Local testing & debugging
 
@@ -63,14 +68,21 @@ This script:
 4. Runs all configs from the given folder sequentially
 5. Kills vLLM when done
 
-Models are configurable at the top of `dgx/run_full_benchmark.sh`. Default: 4B-Thinking (seeker) + 8B (oracle/pruner).
+Models are configurable at the top of `dgx/run_full_benchmark.sh`. Defaults: `Qwen3-4B-Thinking-2507` (seeker) + `Qwen3-8B` (oracle/pruner). Override via `sbatch --export=ALL,MODEL1=...,MODEL2=...,CONFIGS_TARGET=configs/full/4b/ dgx/run_full_benchmark.sh`. Key overridable vars: `MODEL1`, `MODEL1_NAME`, `MODEL2`, `MODEL2_NAME`, `MODE` (`single`/`dual`), `CONFIGS_TARGET`.
 
 Monitor with: `watch squeue -u $USER` and `tail -f logs/info-gainme-full-<JOBID>.out`
 
 **Manual vLLM + screen (alternative):**
 ```bash
-sbatch dgx/run_vllm_single_model.sh
+sbatch dgx/run_vllm_single_model.sh          # single model
+sbatch dgx/run_vllm_multimodel.sh            # two models on same node
 screen -dmS benchmarks bash -c 'bash dgx/run_benchmarks_screen.sh configs/full/8b/ 2>&1 | tee logs/screen-8b-all.out; exec bash'
+```
+
+**SLURM-only benchmarks** (when vLLM is already running):
+```bash
+bash dgx/run_benchmarks_slurm.sh configs/full/8b/            # folder
+bash dgx/run_benchmarks_slurm.sh configs/full/8b/foo.yaml    # single config
 ```
 
 **Single config locally (for testing):**
@@ -114,6 +126,10 @@ Aggregates all `seeker_traces.json` (CoT only) to generate `reasoning_traces_ana
 - Experiment name (used in output folder naming)
 
 **Server endpoints:** Centralized in `configs/servers.yaml` (model name → vLLM URL). `config_loader.py` walks up from any config file to find this automatically. **Never hardcode URLs in individual configs.** Update `servers.yaml` when vLLM endpoints move.
+
+`config_loader.py` also resolves model URLs via environment variables as a fallback: for a model named `Qwen3-8B`, it checks `VLLM_QWEN3_8B` (uppercased, non-alphanumeric → `_`). Priority: `base_url` in config > env var > `servers.yaml`.
+
+**Server override file:** `run_full_benchmark.sh` creates `.servers_override_<JOBID>.yaml` at runtime with the real node IP. Pass it to `benchmark_runner.py` via `--servers-override` if running manually after the job starts.
 
 **CoT (Chain-of-Thought):** Enabled on the seeker via:
 ```yaml
@@ -159,6 +175,7 @@ src/
     question_evaluator.py  ← evaluate_seeker_choices: re-simulates Oracle+Pruner for each
                              considered question to rank them by info gain (read-only)
   utils/config_loader.py   ← YAML → BenchmarkConfig; resolves model names via servers.yaml
+  logging_config.py        ← centralized logging setup (called at process start)
   prompts/                 ← Markdown system prompts for each agent (templated)
 scripts/
   analyze_results.py              ← runs.csv → summary.json + variance.json (wraps analysis/writer)
@@ -171,6 +188,9 @@ scripts/
   aggregate_metrics_by_city.py    ← city-level metric aggregation
   aggregate_ig_over_time.py       ← IG-over-turns aggregation
   generate_question_evaluations_csv.py  ← flatten question_evaluation.json → CSV
+  plot_aggregated_ig.py           ← plot IG-over-turns curves
+  prepare_diseases_csv.py         ← prepare diseases CSV for dataset creation
+  download_from_hf.py / upload_to_hf.py  ← HuggingFace dataset sync (see also dgx/ shell wrappers)
 ```
 
 **Key flow:** `benchmark_runner.py` → `BenchmarkRunner.run()` → per game: `Orchestrator.from_target()` → loop: Seeker asks → Oracle answers → Pruner prunes → entropy computed → `TurnState` appended → results written to `runs.csv`.
@@ -214,11 +234,16 @@ outputs/
 - Benchmarks & analysis run inside **Singularity** container (`vllm_openai_latest.sif`)
 - Typically on DGX H100 nodes with `OPENAI_API_KEY` in `.env`
 
+**Singularity bind mounts:** The host path `/raid/user_danielpedrozo` is mounted as `/workspace` inside the container (`--bind /raid/user_danielpedrozo:/workspace --pwd /workspace`). Config file paths should use host paths; the scripts handle the translation.
+
 **File permissions:**
 - Shared group `sd22` — scripts wrap commands with `sg sd22 -c "..."` to ensure files created by Singularity are group-writable
-- Output files inherit group permissions for collaborative access
+- `umask 002` is set in dgx scripts so new files are group-writable by default
 
-**Server configuration:**
-- `configs/servers.yaml` maps model names to vLLM endpoint URLs
-- Update here when endpoints move (IP/port changes)
-- Do not hardcode URLs in individual experiment configs
+**vLLM orchestration (`run_full_benchmark.sh`):**
+- Ports are derived from `SLURM_JOB_ID` (`BASE_PORT = 8000 + (JOB_ID % 1000)`) to avoid conflicts across concurrent jobs
+- With 1 GPU all agents share one model; with 2+ GPUs seeker gets `MODEL1`, oracle/pruner get `MODEL2`
+- Script polls `GET /v1/models` before starting benchmarks to confirm vLLM is ready
+- Creates `.servers_override_<JOBID>.yaml` with the actual node IP; clean up manually after the job ends
+
+**Data creation scripts:** `data/create_geo_160.py` and `data/create_diseases_160.py` regenerate the dataset CSVs from external sources (GeoNames API, etc.) if the raw data needs to be rebuilt.
