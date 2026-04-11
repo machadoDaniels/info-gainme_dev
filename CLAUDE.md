@@ -68,14 +68,15 @@ This script:
 4. Runs all configs from the given folder sequentially
 5. Kills vLLM when done
 
-Models are configurable at the top of `dgx/run_full_benchmark.sh`. Defaults: `Qwen3-4B-Thinking-2507` (seeker) + `Qwen3-8B` (oracle/pruner). Override via `sbatch --export=ALL,MODEL1=...,MODEL2=...,CONFIGS_TARGET=configs/full/4b/ dgx/run_full_benchmark.sh`. Key overridable vars: `MODEL1`, `MODEL1_NAME`, `MODEL2`, `MODEL2_NAME`, `MODE` (`single`/`dual`), `CONFIGS_TARGET`.
+Models are configurable at the top of `dgx/run_full_benchmark.sh`. Defaults: `Qwen3-4B-Thinking-2507` (seeker) + `Qwen3-8B` (oracle/pruner). Override via `sbatch --export=ALL,MODEL1=...,MODEL2=...,CONFIGS_TARGET=configs/full/4b/ dgx/run_full_benchmark.sh`. Key overridable vars: `MODEL1`, `MODEL1_NAME`, `MODEL2`, `MODEL2_NAME`, `MODE` (`single`/`dual`), `CONFIGS_TARGET`, `MODEL1_PORT`, `MODEL2_PORT` (ports default to `8000 + (JOB_ID % 1000)` and `+1`).
 
 Monitor with: `watch squeue -u $USER` and `tail -f logs/info-gainme-full-<JOBID>.out`
 
 **Manual vLLM + screen (alternative):**
 ```bash
-sbatch dgx/run_vllm_single_model.sh          # single model
-sbatch dgx/run_vllm_multimodel.sh            # two models on same node
+sbatch dgx/run_vllm_single_model.sh          # single model (Singularity)
+sbatch dgx/run_vllm_multimodel.sh            # two models on same node (Singularity)
+sbatch dgx/run_vllm_conda.sh                 # single model via Conda (not Singularity; includes SSH tunnel instructions for local access)
 screen -dmS benchmarks bash -c 'bash dgx/run_benchmarks_screen.sh configs/full/8b/ 2>&1 | tee logs/screen-8b-all.out; exec bash'
 ```
 
@@ -109,6 +110,8 @@ bash dgx/run_synthesize_traces.sh                                          # use
 MODEL=Qwen3-8B BASE_URL=http://localhost:8020/v1 bash dgx/run_synthesize_traces.sh  # local model
 ```
 For each CoT game, extracts `<think>` blocks from `seeker.json` and synthesizes structured reasoning (options considered, choice rationale) via LLM. Idempotent — skips if `seeker_traces.json` exists. Output: `seeker_traces.json` per conversation.
+
+Parallelism is two-level: `WORKERS` (default 8) = conversations in parallel per experiment; `TURN_WORKERS` (default 4) = LLM calls parallelized within a conversation. Max concurrent LLM calls ≈ `workers × turn_workers`. Override via `--turn-workers` flag or `TURN_WORKERS` env var.
 
 **Step 3: Analyze reasoning traces**
 ```bash

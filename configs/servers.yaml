@@ -9,6 +9,12 @@
 # B200-1: 10.100.0.121
 
 servers:
+  # --- Ablation pruner/oracle models ---
+  # Update IPs/ports before running ablation jobs
+  Nemotron-Cascade-8B: "http://CHANGE_ME/v1"   # nvidia/Nemotron-Cascade-8B
+  Gemma-3-12B-IT: "http://CHANGE_ME/v1"        # google/gemma-3-12b-it  (vllm --trust-remote-code not needed)
+  # Note: Nemotron requires /no_think appended to user messages to disable reasoning mode
+
   Qwen3-8B: "http://10.100.0.113:8028/v1"
   Qwen3-30B-A3B-Thinking-2507: "http://10.100.0.121:8029/v1"
   # Qwen3-30B-A3B-Instruct-2507: "http://10.100.0.113:8022/v1"
