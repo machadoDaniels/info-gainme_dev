@@ -60,6 +60,7 @@ class SeekerAgent:
                 domain_description=self._domain_config.domain_description,
                 max_turns=self._max_turns,
                 observability_mode=self._observability_mode.value,
+                pool_description=self._domain_config.seeker_pool_description,
             ),
         )
 

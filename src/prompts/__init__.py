@@ -49,6 +49,7 @@ def get_seeker_system_prompt(
     domain_description: str = "geographic (cities, countries, regions)",
     max_turns: int = 25,
     observability_mode: str = "PARTIALLY_OBSERVABLE",
+    pool_description: str = "",
 ) -> str:
     """Get the SeekerAgent system prompt.
 
@@ -57,18 +58,24 @@ def get_seeker_system_prompt(
         domain_description: Description of the domain for context.
         max_turns: Maximum number of turns allowed.
         observability_mode: "FULLY_OBSERVABLE" or "PARTIALLY_OBSERVABLE".
+        pool_description: Optional extra context about how the candidate pool
+            was constructed. Injected only into the Seeker prompt so the model
+            can adjust its prior. Leave empty for baseline behaviour.
     """
     if observability_mode in ("FULLY_OBSERVABLE", "FO"):
         prompt_name = "seeker_system_fo"
     else:
         prompt_name = "seeker_system_po"
     content = load_prompt(prompt_name)
-    return (
+    prompt = (
         content
         .replace("{TARGET_NOUN}", target_noun)
         .replace("{DOMAIN_DESCRIPTION}", domain_description)
         .replace("{MAX_TURNS}", str(max_turns))
     )
+    if pool_description:
+        prompt += f"\n\n## Candidate Pool\n\n{pool_description}"
+    return prompt
 
 
 def get_oracle_system_prompt(

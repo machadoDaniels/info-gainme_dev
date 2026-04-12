@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -13,13 +13,16 @@ class DomainConfig:
         leaf_type: Tipo de no folha ("city" | "object").
         node_id_prefix: Prefixo dos IDs dos nos folha ("city:" | "object:").
         target_noun: Termo para o alvo nos prompts ("city" | "object").
-        domain_description: Descricao do dominio para prompts.
+        domain_description: Descricao do dominio para prompts (shared by all agents).
+        seeker_pool_description: Optional extra context injected only into the
+            Seeker system prompt. Leave empty for baseline behaviour (no prior).
     """
 
     leaf_type: str
     node_id_prefix: str
     target_noun: str
     domain_description: str
+    seeker_pool_description: str = field(default="")
 
 
 # Configuracoes pre-definidas

@@ -9,6 +9,8 @@ from typing import Dict, Any, Optional
 from ..data_types import ObservabilityMode
 from ..agents.llm_config import LLMConfig
 from ..benchmark_config import BenchmarkConfig
+import dataclasses
+
 from ..domain.types import GEO_DOMAIN, OBJECTS_DOMAIN, DISEASES_DOMAIN
 
 
@@ -94,13 +96,20 @@ def load_benchmark_config(config_path: Path, api_key: str, servers_override_path
         raise ValueError(f"Unknown observability mode: {mode_str}")
     
     models = config["models"]
-    dataset_type = config.get("dataset", {}).get("type", "geo")
+    dataset_cfg = config.get("dataset", {})
+    dataset_type = dataset_cfg.get("type", "geo")
     if dataset_type == "objects":
         domain_config = OBJECTS_DOMAIN
     elif dataset_type == "diseases":
         domain_config = DISEASES_DOMAIN
     else:
         domain_config = GEO_DOMAIN
+
+    pool_description = dataset_cfg.get("pool_description", "")
+    if pool_description:
+        domain_config = dataclasses.replace(
+            domain_config, seeker_pool_description=pool_description
+        )
 
     benchmark_config = BenchmarkConfig(
         seeker_config=create_llm_config(models["seeker"]),

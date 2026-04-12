@@ -51,6 +51,14 @@ python3 benchmark_runner.py --config configs/full/8b/geo_160_8b_fo_cot.yaml
 
 Results write to `outputs/` and are resumable — re-running the same config skips completed `(target_id, run_index)` pairs.
 
+**Run the human baseline** (interactive CLI — you play as the Seeker):
+```bash
+python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml
+python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 5 --seed 42
+```
+
+Configs in `configs/human/` cover all three domains × FO/PO. Oracle and Pruner remain LLM-powered (Qwen3-8B). Results are saved to `outputs/` in the same structure as automated benchmarks and are compatible with the full analysis pipeline. Use `--num-games 0` to cycle through all targets. Ctrl+C stops after the current game finishes.
+
 ## Running benchmarks
 
 **Automated (recommended): Single SLURM job with vLLM + benchmarks**
@@ -122,8 +130,8 @@ Aggregates all `seeker_traces.json` (CoT only) to generate `reasoning_traces_ana
 
 ## Configuration
 
-**Experiment configs** live in `configs/full/<model>/` as YAML files. Each specifies:
-- Models for seeker, oracle, pruner (agent LLM configs)
+**Experiment configs** live in `configs/full/<model>/` as YAML files. Human baseline configs live in `configs/human/`. Each specifies:
+- Models for seeker, oracle, pruner (agent LLM configs); set `model: "human"` on the seeker for the human baseline — no vLLM endpoint needed
 - Dataset type (`geo`, `objects`, `diseases`) and CSV path
 - Observability mode (`FULLY_OBSERVABLE` / `PARTIALLY_OBSERVABLE`)
 - Experiment name (used in output folder naming)
@@ -151,6 +159,7 @@ No-CoT configs omit both fields entirely.
 
 ```
 benchmark_runner.py        ← CLI entrypoint; loads config, dataset, runs BenchmarkRunner
+human_benchmark_runner.py  ← Interactive CLI runner for the human seeker baseline
 src/
   benchmark_config.py      ← BenchmarkConfig dataclass (agent configs + game settings)
   benchmark.py             ← BenchmarkRunner: ThreadPoolExecutor, incremental CSV writes
@@ -163,6 +172,7 @@ src/
     llm_config.py          ← LLMConfig dataclass
     llm_adapter.py         ← OpenAI-compatible HTTP adapter (history, reasoning capture)
     seeker.py              ← SeekerAgent
+    human_seeker.py        ← HumanSeekerAgent (drop-in replacement; reads questions from stdin)
     oracle.py              ← OracleAgent
     pruner.py              ← PrunerAgent (returns keep_labels via structured JSON)
   domain/
@@ -196,7 +206,9 @@ scripts/
   download_from_hf.py / upload_to_hf.py  ← HuggingFace dataset sync (see also dgx/ shell wrappers)
 ```
 
-**Key flow:** `benchmark_runner.py` → `BenchmarkRunner.run()` → per game: `Orchestrator.from_target()` → loop: Seeker asks → Oracle answers → Pruner prunes → entropy computed → `TurnState` appended → results written to `runs.csv`.
+**Key flow:** `benchmark_runner.py` / `human_benchmark_runner.py` → `BenchmarkRunner.run()` → per game: `Orchestrator.from_target()` → loop: Seeker asks → Oracle answers → Pruner prunes → entropy computed → `TurnState` appended → results written to `runs.csv`.
+
+**Human seeker integration:** `Orchestrator.from_target()` checks `seeker_config.model == "human"` and instantiates `HumanSeekerAgent` instead of `SeekerAgent` + `LLMAdapter`. `HumanSeekerAgent` implements the same interface (`question_to_oracle`, `add_oracle_answer_and_pruning`, etc.) and uses a `_MockLLMAdapter` so `export_conversation()` still produces a valid `seeker.json`.
 
 **Parallelism:** `BenchmarkRunner` runs games concurrently via `ThreadPoolExecutor(max_workers=N)`. CSV writes are serialized with a `threading.Lock`. Each thread gets a `copy.deepcopy(pool)` to avoid shared state.
 
