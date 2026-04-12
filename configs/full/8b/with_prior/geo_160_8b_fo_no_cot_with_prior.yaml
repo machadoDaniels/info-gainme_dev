@@ -8,6 +8,9 @@ models:
   seeker:
     model: "Qwen3-8B"
     timeout: 120.0
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
 
   oracle:
     model: "Qwen3-8B"
