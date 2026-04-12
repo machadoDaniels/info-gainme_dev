@@ -97,6 +97,13 @@ class CityStats:
         return sum(r.turns for r in self.runs) / self.num_runs
     
     @property
+    def mean_h_start(self) -> float:
+        """Média da entropia inicial (H no início do jogo) nesta cidade."""
+        if not self.runs:
+            return 0.0
+        return sum(r.h_start for r in self.runs) / self.num_runs
+    
+    @property
     def std_turns(self) -> float:
         """Desvio padrão de turnos (populacional)."""
         if not self.runs or self.num_runs == 1:
@@ -355,6 +362,29 @@ class ExperimentResults:
         return self.std_turns / (len(self.cities) ** 0.5)
     
     @property
+    def mean_h_start(self) -> float:
+        """Média global da entropia inicial (média sobre todas as runs)."""
+        if self.total_runs == 0:
+            return 0.0
+        total = sum(sum(r.h_start for r in city.runs) for city in self.cities.values())
+        return total / self.total_runs
+    
+    @property
+    def std_h_start(self) -> float:
+        """Desvio padrão da entropia inicial (sobre médias por cidade)."""
+        if len(self.cities) <= 1:
+            return 0.0
+        city_means = [city.mean_h_start for city in self.cities.values()]
+        return statistics.stdev(city_means) if len(city_means) > 1 else 0.0
+    
+    @property
+    def se_mean_h_start(self) -> float:
+        """Standard Error da média global da entropia inicial."""
+        if len(self.cities) <= 1:
+            return 0.0
+        return self.std_h_start / (len(self.cities) ** 0.5)
+    
+    @property
     def se_mean_seeker_tokens(self) -> float:
         """Standard Error da média global de tokens do Seeker.
         
@@ -446,6 +476,9 @@ class ExperimentResults:
                 "mean_turns": round(self.mean_turns, 2),
                 "std_turns": round(self.std_turns, 2),
                 "se_mean_turns": round(self.se_mean_turns, 2),
+                "mean_h_start": round(self.mean_h_start, 4),
+                "std_h_start": round(self.std_h_start, 4),
+                "se_mean_h_start": round(self.se_mean_h_start, 4),
                 "mean_compliance": round(self.mean_compliance, 4),
                 "mean_seeker_tokens": round(self.mean_seeker_tokens, 0),
                 "std_seeker_tokens": round(self.std_seeker_tokens, 0),
