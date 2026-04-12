@@ -35,7 +35,7 @@ dataset:
 
 experiment:
   name: "geo_160_8b_fo_no_cot_with_prior"
-  max_workers: 16
+  max_workers: 32
   tags:
     prior: "population_rank"
 

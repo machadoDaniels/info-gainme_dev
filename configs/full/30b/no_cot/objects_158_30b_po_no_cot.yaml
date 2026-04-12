@@ -29,7 +29,7 @@ dataset:
 
 experiment:
   name: "objects_158_30b_po_no_cot"
-  max_workers: 16
+  max_workers: 24
   tags: {}
 
 output:

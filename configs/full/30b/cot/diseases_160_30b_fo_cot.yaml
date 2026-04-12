@@ -30,7 +30,7 @@ dataset:
 
 experiment:
   name: "diseases_160_30b_fo_cot"
-  max_workers: 16
+  max_workers: 24
   tags: {}
 
 output:
