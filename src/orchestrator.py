@@ -19,6 +19,7 @@ from .candidates import Candidate, CandidatePool
 from .data_types import TurnState, Question, Answer, ObservabilityMode
 from .domain.types import DomainConfig, GEO_DOMAIN
 from .agents.seeker import SeekerAgent
+from .agents.human_seeker import HumanSeekerAgent
 from .agents.oracle import OracleAgent
 from .agents.pruner import PrunerAgent
 from .agents.llm_adapter import LLMAdapter
@@ -105,18 +106,25 @@ class Orchestrator:
         Returns:
             Fully configured Orchestrator ready to run.
         """
-        seeker_adapter = LLMAdapter(seeker_config, save_reasoning=True)
         oracle_adapter = LLMAdapter(oracle_config, save_reasoning=True)
         pruner_adapter = LLMAdapter(pruner_config, save_reasoning=True)
 
         domain_config = domain_config or GEO_DOMAIN
 
-        seeker = SeekerAgent(
-            llm_adapter=seeker_adapter,
-            observability_mode=observability_mode,
-            domain_config=domain_config,
-            max_turns=max_turns,
-        )
+        if seeker_config.model == "human":
+            seeker = HumanSeekerAgent(
+                observability_mode=observability_mode,
+                domain_config=domain_config,
+                max_turns=max_turns,
+            )
+        else:
+            seeker_adapter = LLMAdapter(seeker_config, save_reasoning=True)
+            seeker = SeekerAgent(
+                llm_adapter=seeker_adapter,
+                observability_mode=observability_mode,
+                domain_config=domain_config,
+                max_turns=max_turns,
+            )
 
         oracle = OracleAgent(
             llm_adapter=oracle_adapter,

@@ -56,18 +56,23 @@ def load_benchmark_config(config_path: Path, api_key: str, servers_override_path
 
     # Create LLM configs
     def create_llm_config(model_config: Dict[str, Any]) -> LLMConfig:
+        model_name = model_config["model"]
+
+        # Human seeker needs no LLM endpoint
+        if model_name == "human":
+            return LLMConfig(model="human", api_key="n/a")
+
         # Extract extra parameters (all non-standard parameters)
         extra_params = {}
         standard_params = {
-            "model", "base_url", "timeout", "temperature", 
+            "model", "base_url", "timeout", "temperature",
             "max_tokens", "use_reasoning", "user", "response_format"
         }
-        
+
         for key, value in model_config.items():
             if key not in standard_params:
                 extra_params[key] = value
-        
-        model_name = model_config["model"]
+
         env_key = "VLLM_" + re.sub(r"[^A-Z0-9]", "_", model_name.upper())
         base_url: Optional[str] = model_config.get("base_url") or os.environ.get(env_key) or servers.get(model_name)
 

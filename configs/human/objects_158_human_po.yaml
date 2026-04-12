@@ -1,0 +1,38 @@
+# Human Baseline — Objects (158 items, Partially Observable)
+# Run: python human_benchmark_runner.py --config configs/human/objects_158_human_po.yaml
+
+models:
+  seeker:
+    model: "human"
+
+  oracle:
+    model: "Qwen3-8B"
+    timeout: 120.0
+
+  pruner:
+    model: "Qwen3-8B"
+    timeout: 120.0
+
+game:
+  observability_mode: "PARTIALLY_OBSERVABLE"
+  max_turns: 30
+
+dataset:
+  type: "objects"
+  csv_path: "data/objects/objects_full.csv"
+  num_targets: null
+  runs_per_target: 1
+
+experiment:
+  name: "objects_158_human_po"
+  max_workers: 1
+  tags:
+    seeker_type: "human"
+
+output:
+  base_dir: "outputs"
+  save_conversations: true
+  save_graph_plots: false
+
+debug:
+  enabled: true
