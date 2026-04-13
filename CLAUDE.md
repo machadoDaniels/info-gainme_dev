@@ -53,8 +53,8 @@ Results write to `outputs/` and are resumable — re-running the same config ski
 
 **Run the human baseline** (interactive CLI — you play as the Seeker):
 ```bash
-python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml
-python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 5 --seed 42
+python3 human_benchmark_runner.py --config configs/human/geo_20_human_fo.yaml
+python3 human_benchmark_runner.py --config configs/human/geo_20_human_fo.yaml --num-games 5 --seed 42
 ```
 
 Configs in `configs/human/` cover all three domains × FO/PO. Oracle and Pruner remain LLM-powered (Qwen3-8B). Results are saved to `outputs/` in the same structure as automated benchmarks and are compatible with the full analysis pipeline. Use `--num-games 0` to cycle through all targets. Ctrl+C stops after the current game finishes.

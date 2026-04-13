@@ -8,9 +8,9 @@ analysed with the standard analysis pipeline.
 
 Usage
 -----
-    python human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml
-    python human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 5
-    python human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --seed 42
+    python human_benchmark_runner.py --config configs/human/geo_20_human_fo.yaml
+    python human_benchmark_runner.py --config configs/human/geo_20_human_fo.yaml --num-games 5
+    python human_benchmark_runner.py --config configs/human/geo_20_human_fo.yaml --seed 42
 
 The target is chosen randomly and NOT revealed to the player up front.
 Press Ctrl+C at any time to stop after the current game finishes.
@@ -51,7 +51,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Human-seeker benchmark runner")
     parser.add_argument(
-        "--config", type=Path, default="configs/human/geo_160_human_fo.yaml",
+        "--config", type=Path, default="configs/human/geo_20_human_fo.yaml",
         help="Path to human benchmark YAML config",
     )
     parser.add_argument(
