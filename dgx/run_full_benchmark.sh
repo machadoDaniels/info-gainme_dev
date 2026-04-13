@@ -140,11 +140,19 @@ echo "Creating servers override file..."
 NODE_IP=$(python3 -c "import socket; print(socket.gethostbyname('$(hostname)'))" 2>/dev/null || echo "$(hostname)")
 
 SERVERS_OVERRIDE="${PROJECT_DIR}/.servers_override_${SLURM_JOB_ID}.yaml"
-cat > "${SERVERS_OVERRIDE}" <<EOF
+if [ "${MODE}" = "dual" ]; then
+    cat > "${SERVERS_OVERRIDE}" <<EOF
 servers:
   ${MODEL1_NAME}: http://${NODE_IP}:${MODEL1_PORT}/v1
   ${MODEL2_NAME}: http://${NODE_IP}:${MODEL2_PORT}/v1
 EOF
+else
+    # Single mode: only one server, write MODEL1_NAME only to avoid duplicate key
+    cat > "${SERVERS_OVERRIDE}" <<EOF
+servers:
+  ${MODEL1_NAME}: http://${NODE_IP}:${MODEL1_PORT}/v1
+EOF
+fi
 
 echo "  ✓ ${SERVERS_OVERRIDE} created"
 echo "  ✓ ${MODEL1_NAME} → http://${NODE_IP}:${MODEL1_PORT}/v1"
