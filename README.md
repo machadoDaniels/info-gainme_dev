@@ -31,18 +31,18 @@ Configs disponíveis em `configs/human/`: `geo`, `objects` e `diseases` × `fo`/
 
 ## Executando benchmarks
 
-### Via SLURM com vLLM (recomendado na DGX)
+### Via SLURM com vLLM - DGX
 
 Sobe os servidores vLLM e roda os benchmarks em um único job SLURM:
 
 ```bash
-# Seeker externo (endpoint já em configs/servers.yaml) — sobe só oracle/pruner
-sbatch dgx/run_external_seeker_benchmark.sh configs/full/235b/no_cot/
-sbatch dgx/run_external_seeker_benchmark.sh configs/full/llama-70b/no_cot/
-
 # Seeker local — sobe todos os modelos necessários
 sbatch dgx/run_full_benchmark.sh configs/full/4b/          # pasta inteira
 sbatch dgx/run_full_benchmark.sh configs/full/4b/cot/geo_160_4b_thinking_fo_cot.yaml  # config individual
+
+# Seeker externo (endpoint já em configs/servers.yaml) — sobe só oracle/pruner
+sbatch dgx/run_external_seeker_benchmark.sh configs/full/235b/no_cot/
+sbatch dgx/run_external_seeker_benchmark.sh configs/full/llama-70b/no_cot/
 ```
 
 Monitore com `watch squeue -u $USER` e `tail -f logs/info-gainme-full-<JOBID>.out`.
@@ -52,28 +52,18 @@ Para adicionar um novo modelo:
 2. Crie os configs em `configs/full/<modelo>/no_cot/` (e `cot/` se o modelo suportar thinking)
 3. Submeta com `sbatch dgx/run_external_seeker_benchmark.sh configs/full/<modelo>/no_cot/`
 
-### Via screen (preferido na DGX)
+
+### Sem subir vLLM (servidores já rodando)
+
+Use quando os endpoints já estão ativos e registrados em `configs/servers.yaml`:
 
 ```bash
-# Roda todos os configs de uma pasta sequencialmente
-screen -dmS benchmarks bash -c 'bash dgx/run_benchmarks_screen.sh configs/full/8b/ 2>&1 | tee logs/screen-8b.out; exec bash'
-screen -r benchmarks
-
-# Config individual
-python3 benchmark_runner.py --config configs/full/8b/geo_160_8b_fo_cot.yaml
-```
-
-### Via SLURM
-
-```bash
-# Pasta inteira
+# Via screen — abre sessão em background para cada config
 bash dgx/run_benchmarks_slurm.sh configs/full/8b/
+bash dgx/run_benchmarks_slurm.sh configs/full/8b/geo_160_8b_fo_cot.yaml  # config individual
 
-# Config específica
-bash dgx/run_benchmarks_slurm.sh configs/full/8b/diseases_fo_cot.yaml
-
-# Com dependência de outro job
-bash dgx/run_benchmarks_slurm.sh configs/full/8b/ --dep 17427
+# Direto no terminal
+python3 benchmark_runner.py --config configs/full/8b/geo_160_8b_fo_cot.yaml
 ```
 
 Benchmarks são **resumíveis** — runs já completos são detectados no `runs.csv` e pulados automaticamente.
