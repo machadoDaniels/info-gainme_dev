@@ -59,8 +59,8 @@ def main() -> None:
         help="Number of games to play (default: 1). Use 0 to play all targets.",
     )
     parser.add_argument(
-        "--seed", type=int, default=None,
-        help="Random seed for target selection (default: random)",
+        "--seed", type=int, default=42,
+        help="Random seed for target selection (default: 42)",
     )
     parser.add_argument(
         "--servers-override", type=Path, default=None,
