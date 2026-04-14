@@ -14,9 +14,17 @@ A métrica principal é o ganho de informação por turno: `IG = H_antes - H_dep
 
 Jogue como Seeker via CLI — Oracle e Pruner continuam sendo LLMs (Qwen3-8B).
 
+Dois modos de observabilidade disponíveis:
+
+- **FO (Fully Observable)** — você vê a lista completa de candidatos restantes a cada turno
+- **PO (Partially Observable)** — você vê apenas o histórico de perguntas e respostas
+
 ```bash
-# Roda todos os alvos do dataset (padrão)
+# Fully Observable (você vê os candidatos restantes)
 python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml
+
+# Partially Observable (você vê só o histórico de Q&A)
+python3 human_benchmark_runner.py --config configs/human/geo_160_human_po.yaml
 
 # Apenas 5 jogos
 python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 5
