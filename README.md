@@ -15,14 +15,11 @@ A métrica principal é o ganho de informação por turno: `IG = H_antes - H_dep
 Jogue como Seeker via CLI — Oracle e Pruner continuam sendo LLMs (Qwen3-8B).
 
 ```bash
-# Escolhe alvos aleatoriamente (padrão: 1 jogo)
+# Roda todos os alvos do dataset (padrão)
 python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml
 
-# 5 jogos com seed fixo
-python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 5 --seed 42
-
-# Todos os alvos do dataset
-python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 0
+# Apenas 5 jogos
+python3 human_benchmark_runner.py --config configs/human/geo_160_human_fo.yaml --num-games 5
 ```
 
 Configs disponíveis em `configs/human/`: `geo`, `objects` e `diseases` × `fo`/`po`. Os resultados são salvos em `outputs/` no mesmo formato dos benchmarks automatizados. Ctrl+C termina após o jogo atual.
