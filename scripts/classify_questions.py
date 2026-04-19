@@ -285,7 +285,16 @@ Fill the `subclass` field whenever a sharper label applies. Good candidates incl
 
 You may also coin a NEW snake_case label if the question clearly warrants one not in the list. Keep it short and descriptive.
 
-When `subclass` is filled, include a short `rationale` explaining why that tag fits. Leave `subclass` null if no sharper label is useful.
+### REQUIRED output shape for `subclass`
+
+`subclass` must be either `null` OR an **object** with TWO keys:
+
+    {
+      "rationale":      "<one short sentence on why this label fits>",
+      "proposed_class": "<snake_case_label>"
+    }
+
+**Never emit `subclass` as a bare string.** `"subclass": "hierarchical_category"` is WRONG. Always wrap it in the object, even when the label seems obvious — the rationale is mandatory whenever the field is non-null.
 
 ### 3. redundancy (relative to the prior Q&A in this game)
 
@@ -296,7 +305,49 @@ When `subclass` is filled, include a short `rationale` explaining why that tag f
 
 If redundancy is not `none`, set `redundant_with_turn` to the 1-indexed turn of the earliest earlier question that makes this one redundant. Otherwise leave it null. When in doubt, pick `none`.
 
-Return ONLY the structured JSON object. No prose."""
+### Worked examples
+
+Example A — semantic + hierarchical_category, no redundancy:
+
+    Question: "Is the target disease primarily affecting the respiratory system?"
+    →
+    {
+      "question_type": "semantic",
+      "subclass": {
+        "rationale": "Asks about a broad organ-system category, a high-level taxonomic bucket.",
+        "proposed_class": "hierarchical_category"
+      },
+      "redundancy": "none",
+      "redundant_with_turn": null
+    }
+
+Example B — malformed (statement), no subclass rationale would be wrong:
+
+    Question: "Johannesburg."
+    →
+    {
+      "question_type": "malformed",
+      "subclass": {
+        "rationale": "Bare noun, no interrogative structure — a candidate statement rather than a yes/no question.",
+        "proposed_class": "statement"
+      },
+      "redundancy": "none",
+      "redundant_with_turn": null
+    }
+
+Example C — direct_guess that is strictly implied by a prior endocrine-system ruling:
+
+    Prior T3: Q "Does the target affect the endocrine system?" / A "No"
+    Question (T11): "Is the target hypothyroidism?"
+    →
+    {
+      "question_type": "direct_guess",
+      "subclass": null,
+      "redundancy": "strictly_implied",
+      "redundant_with_turn": 3
+    }
+
+Return ONLY the structured JSON object. No prose, no markdown fences."""
 
 
 def build_user_message(prior: list[TurnQA], current: TurnQA, domain: str) -> str:
