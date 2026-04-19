@@ -1,30 +1,44 @@
 #!/usr/bin/env python3
-"""Pilot question-type classifier for Info Gainme seeker questions.
+"""Question-type classifier for Info Gainme seeker questions.
 
-Goal: discover whether our starting taxonomy (semantic / lexical / direct_guess)
-covers real seeker behaviour, or whether new classes emerge. The classifier has
-an ``other`` escape hatch that forces the model to justify itself and propose a
-new class name — those proposals are the raw material for expanding the
-taxonomy before a full pass.
+Classifies each seeker question into one of:
+
+    semantic      — domain-knowledge categorisation
+    lexical       — property of the name/string (no domain meaning)
+    direct_guess  — names a specific candidate
+    malformed     — not a valid yes/no question at all
+    other         — escape hatch with a required rationale + proposed_class
+
+Plus redundancy relative to prior Q&A (``none`` / ``exact_duplicate`` /
+``semantic_equivalent`` / ``strictly_implied``) with a ``redundant_with_turn``
+pointer.
+
+The script walks ``outputs/models/**/conversations/**/seeker.json``, buckets
+each conversation into a stratum ``(model, experiment, domain, mode, cot)``,
+optionally samples ``--per-stratum`` conversations from each, and calls an
+OpenAI-compatible vLLM endpoint (Kimi-K2.5 by default) with optional reasoning
+mode. Runs are resumable — existing ``classification.json`` files are reused
+unless ``--force`` is passed.
 
 Usage
 -----
-    # Pilot across a small stratified sample
-    python3 scripts/classify_questions_pilot.py \
-        --base-url http://200.137.197.131:60002/v1 \
-        --api-key  NINGUEM-TA-PURO-2K26 \
-        --model    nvidia/Kimi-K2.5-NVFP4 \
-        --per-stratum 3
+    # Sample 30 conversations per stratum (recommended for headline numbers)
+    python3 scripts/classify_questions.py \
+        --per-stratum 30 \
+        --max-concurrency 32
 
-    # Classify a specific seeker.json (debug)
-    python3 scripts/classify_questions_pilot.py \
+    # Full sweep (all conversations, capped per stratum)
+    python3 scripts/classify_questions.py --per-stratum 99999
+
+    # Classify a single seeker.json (debug)
+    python3 scripts/classify_questions.py \
         --seeker-file outputs/models/.../conversations/.../seeker.json
 
 Output
 ------
     outputs/question_classification/
         <experiment>/<target>/classification.json   # per-conversation
-        pilot_summary.json                          # aggregated counts + OTHER proposals
+        summary.json                                # aggregated counts + OTHER proposals
 """
 
 from __future__ import annotations
@@ -55,7 +69,7 @@ class QuestionType(str, Enum):
     LEXICAL = "lexical"            # property of the name/string (no domain semantics)
     DIRECT_GUESS = "direct_guess"  # names a specific candidate
     MALFORMED = "malformed"        # not a valid yes/no question at all
-    OTHER = "other"                # escape hatch — forces OtherClass
+    OTHER = "other"                # genuinely doesn't fit any of the above
 
 
 class RedundancyType(str, Enum):
@@ -65,22 +79,30 @@ class RedundancyType(str, Enum):
     STRICTLY_IMPLIED = "strictly_implied"      # answer is determined by prior Q&A
 
 
-class OtherClass(BaseModel):
-    """Populated only when question_type == OTHER. Drives taxonomy expansion."""
+class SubClass(BaseModel):
+    """Optional supplementary tag — a more specific sub-class worth surfacing.
 
+    Orthogonal to ``question_type``: a ``semantic`` question can also carry a
+    ``subclass`` like ``comparative_size`` or ``relational``. Use whenever a
+    more specific label is relevant, regardless of the primary type.
+    """
+
+    # Rationale is nice-to-have but models sometimes omit it; don't reject.
     rationale: str = Field(
-        ...,
-        description=(
-            "Why none of the known classes fit, AND why the proposed "
-            "class is the right fit. Two distinct points."
-        ),
+        default="",
+        description="Why this specific sub-class is the right tag for this question.",
     )
-    # The model occasionally emits `class_name` instead of `proposed_class` — accept both.
+    # Models use various field names for the label — accept the common ones.
     proposed_class: str = Field(
         ...,
-        validation_alias=AliasChoices("proposed_class", "class_name", "class"),
+        validation_alias=AliasChoices(
+            "proposed_class", "class_name", "class", "label", "name", "tag"
+        ),
         serialization_alias="proposed_class",
-        description="Short snake_case name for the new class (e.g. 'relational', 'quantitative').",
+        description=(
+            "Short snake_case name for the sub-class "
+            "(e.g. 'comparative_size', 'relational', 'quantitative_threshold')."
+        ),
     )
 
 
@@ -88,9 +110,12 @@ class QuestionClassification(BaseModel):
     """Structured output — one per question."""
 
     question_type: QuestionType
-    other: OtherClass | None = Field(
+    subclass: SubClass | None = Field(
         default=None,
-        description="Required iff question_type == 'other'; otherwise null.",
+        description=(
+            "OPTIONAL supplementary tag. Fill whenever a more specific sub-class is "
+            "relevant, independent of question_type. Leave null if no useful sub-class applies."
+        ),
     )
     redundancy: RedundancyType
     redundant_with_turn: int | None = Field(
@@ -101,13 +126,14 @@ class QuestionClassification(BaseModel):
         ),
     )
 
-    @model_validator(mode="after")
-    def _other_required_when_type_is_other(self) -> "QuestionClassification":
-        if self.question_type == QuestionType.OTHER and self.other is None:
-            raise ValueError(
-                "question_type='other' requires the 'other' field with rationale + proposed_class."
-            )
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_subclass(cls, v: Any) -> Any:
+        """Accept a bare string for ``subclass`` (shorthand) and convert to object."""
+        if isinstance(v, dict) and isinstance(v.get("subclass"), str):
+            label = v["subclass"].strip()
+            v["subclass"] = {"proposed_class": label, "rationale": ""} if label else None
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -230,26 +256,45 @@ SYSTEM_PROMPT = """You are a taxonomist labelling yes/no questions asked by a se
 
 The seeker tries to identify a secret target (a city, a physical object, or a disease) by asking yes/no questions. You will be given one question at a time, together with the questions and Oracle answers that came before it in the same game.
 
-For each question, decide TWO things.
+For each question, decide THREE things.
 
-### 1. question_type
+### 1. question_type (the primary class — pick exactly one)
 
 - **semantic**     — uses domain knowledge to categorise the target. Attributes, properties, function, location, symptoms, taxonomy. Examples: "Is it in Asia?", "Is it edible?", "Does it affect the brain?".
 - **lexical**      — asks about a property of the NAME/STRING only, with no domain meaning. Examples: "Does it start with A?", "Is the name 5 letters long?".
 - **direct_guess** — names a specific candidate. Examples: "Is it Mumbai?", "Is it a guitar?", "Is it dengue?".
 - **malformed**    — not a valid yes/no question at all. Examples: "Yes.", "intertrigo", "[Oracle] - No", "What is the disease?" (open-ended), a statement instead of a question. Pick this when the seeker violated the game's Q&A format.
-- **other**        — none of the above fit. You MUST fill the `other` field with a rationale AND a `proposed_class` name. Do not pick `other` if one of the four above clearly fits — only when the question is genuinely a new well-formed class (e.g. relational to another entity, quantitative threshold, strategic meta-question, compound multi-predicate, etc.). Do NOT use `other` for malformed output — use `malformed` instead.
+- **other**        — truly does not fit any of the above. Rare.
 
-### 2. redundancy (relative to the prior Q&A in this game)
+### 2. subclass (OPTIONAL — supplementary tag, orthogonal to question_type)
+
+The `subclass` field is **not** an escape hatch. It is an additional, more specific label you may attach to ANY question (including `semantic`, `direct_guess`, etc.) whenever a more precise sub-category is relevant and worth surfacing.
+
+Fill the `subclass` field whenever a sharper label applies. Good candidates include (non-exhaustive):
+
+- **comparative_size**       — "Is it larger than a microwave?", "Is it bigger than Europe?"
+- **comparative_other**      — non-size comparisons ("older than...", "more common than...")
+- **quantitative_threshold** — "Population > 1M?", "More than 4 legs?", "Mortality > 10%?"
+- **relational**             — relative to another entity ("near India?", "shares a border with France?")
+- **hierarchical_category**  — asks about a broad taxonomic level ("Is it an animal?", "Is it a continent-level region?")
+- **fine_grained_category**  — asks about a narrow taxonomic level ("Is it a citrus fruit?", "Is it a striker position?")
+- **compound_predicate**     — multiple conjoined conditions ("in Asia AND coastal?")
+- **meta_strategy**          — about the game state itself, not the target
+- **open_ended**              — malformed because it's open-ended (sub-type of `malformed`)
+- **statement**              — malformed because it's a statement (sub-type of `malformed`)
+
+You may also coin a NEW snake_case label if the question clearly warrants one not in the list. Keep it short and descriptive.
+
+When `subclass` is filled, include a short `rationale` explaining why that tag fits. Leave `subclass` null if no sharper label is useful.
+
+### 3. redundancy (relative to the prior Q&A in this game)
 
 - **none**                — brings new information.
 - **exact_duplicate**     — literally the same wording as an earlier question.
 - **semantic_equivalent** — asks the same thing in different words (answer would always match).
-- **strictly_implied**    — the answer is already determined by prior Q&A (e.g. earlier answers already narrow it down so this question's outcome is guaranteed).
+- **strictly_implied**    — the answer is already determined by prior Q&A.
 
-If redundancy is not `none`, set `redundant_with_turn` to the 1-indexed turn of the earliest earlier question that makes this one redundant. Otherwise leave it null.
-
-Be strict: `redundant` requires high confidence. When in doubt, pick `none`.
+If redundancy is not `none`, set `redundant_with_turn` to the 1-indexed turn of the earliest earlier question that makes this one redundant. Otherwise leave it null. When in doubt, pick `none`.
 
 Return ONLY the structured JSON object. No prose."""
 
@@ -370,7 +415,7 @@ async def classify_conversation(
                 client, model, prior, current, stratum.domain, thinking, semaphore
             )
             payload: dict[str, Any] = cls.model_dump(mode="json")
-        except Exception as e:  # noqa: BLE001 — pilot script, surface everything
+        except Exception as e:  # noqa: BLE001 — surface all errors as payloads
             payload = {"error": f"{type(e).__name__}: {e}"}
         return {
             "turn": current.turn,
@@ -403,7 +448,8 @@ async def classify_conversation(
 def summarise(conv_results: list[dict[str, Any]]) -> dict[str, Any]:
     type_counts: Counter[str] = Counter()
     redundancy_counts: Counter[str] = Counter()
-    other_proposals: list[dict[str, Any]] = []
+    subclass_examples: list[dict[str, Any]] = []
+    subclass_by_type: dict[str, Counter[str]] = defaultdict(Counter)
     per_stratum: dict[str, Counter[str]] = defaultdict(Counter)
     errors = 0
     total_turns = 0
@@ -420,20 +466,25 @@ def summarise(conv_results: list[dict[str, Any]]) -> dict[str, Any]:
             type_counts[qt] += 1
             per_stratum[stratum_key][qt] += 1
             redundancy_counts[cls["redundancy"]] += 1
-            if qt == "other" and cls.get("other"):
-                other_proposals.append(
-                    {
-                        "proposed_class": cls["other"]["proposed_class"],
-                        "rationale": cls["other"]["rationale"],
-                        "question": turn["question"],
-                        "domain": conv["domain"],
-                        "experiment": conv["experiment"],
-                        "target": conv["target"],
-                        "turn": turn["turn"],
-                    }
-                )
+            if cls.get("subclass"):
+                sub = cls["subclass"]
+                pc = sub.get("proposed_class")
+                if pc:
+                    subclass_by_type[qt][pc.strip().lower()] += 1
+                    subclass_examples.append(
+                        {
+                            "proposed_class": pc,
+                            "rationale": sub.get("rationale", ""),
+                            "question_type": qt,
+                            "question": turn["question"],
+                            "domain": conv["domain"],
+                            "experiment": conv["experiment"],
+                            "target": conv["target"],
+                            "turn": turn["turn"],
+                        }
+                    )
 
-    proposed_class_counts = Counter(p["proposed_class"].strip().lower() for p in other_proposals)
+    subclass_counts = Counter(e["proposed_class"].strip().lower() for e in subclass_examples)
 
     return {
         "total_conversations": len(conv_results),
@@ -442,8 +493,9 @@ def summarise(conv_results: list[dict[str, Any]]) -> dict[str, Any]:
         "question_type_counts": dict(type_counts),
         "redundancy_counts": dict(redundancy_counts),
         "per_stratum_question_type_counts": {k: dict(v) for k, v in per_stratum.items()},
-        "other_proposed_class_counts": dict(proposed_class_counts.most_common()),
-        "other_examples": other_proposals,
+        "subclass_counts": dict(subclass_counts.most_common()),
+        "subclass_by_question_type": {k: dict(v) for k, v in subclass_by_type.items()},
+        "subclass_examples": subclass_examples,
     }
 
 
@@ -490,10 +542,29 @@ async def _amain(args: argparse.Namespace) -> int:
     semaphore = asyncio.Semaphore(args.max_concurrency)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    conv_results: list[dict[str, Any]] = []
     total = len(picks)
     done = 0
     lock = asyncio.Lock()
+
+    def _out_path(stratum: Stratum, path: Path) -> Path:
+        target = path.parent.name
+        return args.out_dir / stratum.experiment / target / "classification.json"
+
+    # Resumability: split into already-done (reloaded) vs to-do (need LLM calls).
+    existing: list[dict[str, Any]] = []
+    todo: list[tuple[Stratum, Path]] = []
+    for st, path in picks:
+        p = _out_path(st, path)
+        if not args.force and p.exists():
+            try:
+                existing.append(json.loads(p.read_text()))
+                continue
+            except Exception as e:  # noqa: BLE001 — corrupt file, re-run
+                print(f"  warning: could not reload {p} ({e}); will re-classify", file=sys.stderr)
+        todo.append((st, path))
+    print(f"Resume: {len(existing)} already classified, {len(todo)} to do.")
+
+    todo_total = len(todo)
 
     async def _run_conv(stratum: Stratum, path: Path) -> dict[str, Any] | None:
         nonlocal done
@@ -509,37 +580,37 @@ async def _amain(args: argparse.Namespace) -> int:
         except Exception as e:  # noqa: BLE001
             async with lock:
                 done += 1
-                print(f"[{done}/{total}] FAILED {path}: {type(e).__name__}: {e}", file=sys.stderr)
+                print(f"[{done}/{todo_total}] FAILED {path}: {type(e).__name__}: {e}", file=sys.stderr)
             return None
 
-        out_path = args.out_dir / stratum.experiment / res["target"] / "classification.json"
+        out_path = _out_path(stratum, path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(res, indent=2, ensure_ascii=False))
         async with lock:
             done += 1
-            print(f"[{done}/{total}] done: {stratum.experiment}/{path.parent.name}")
+            print(f"[{done}/{todo_total}] done: {stratum.experiment}/{path.parent.name}")
         return res
 
     try:
-        results = await asyncio.gather(*(_run_conv(st, path) for st, path in picks))
+        results = await asyncio.gather(*(_run_conv(st, path) for st, path in todo))
     finally:
         await client.close()
 
-    conv_results = [r for r in results if r is not None]
+    conv_results = existing + [r for r in results if r is not None]
 
     summary = summarise(conv_results)
-    summary_path = args.out_dir / "pilot_summary.json"
+    summary_path = args.out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
 
-    print("\n=== Pilot summary ===")
+    print("\n=== Summary ===")
     print(f"  conversations: {summary['total_conversations']}")
     print(f"  turns:         {summary['total_turns']} (errors: {summary['errors']})")
     print(f"  question_type: {summary['question_type_counts']}")
     print(f"  redundancy:    {summary['redundancy_counts']}")
-    if summary["other_proposed_class_counts"]:
-        print("  OTHER proposed classes (top):")
-        for name, count in list(summary["other_proposed_class_counts"].items())[:15]:
-            print(f"    {count:>3}  {name}")
+    if summary["subclass_counts"]:
+        print("  subclass tags (top):")
+        for name, count in list(summary["subclass_counts"].items())[:20]:
+            print(f"    {count:>4}  {name}")
     print(f"\nWrote: {summary_path}")
     return 0
 
@@ -567,6 +638,11 @@ def main() -> int:
     )
     p.add_argument("--no-thinking", action="store_true", help="Disable reasoning mode on the classifier.")
     p.add_argument("--dry-run", action="store_true", help="List what would be classified and exit.")
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-classify conversations even if classification.json already exists.",
+    )
     args = p.parse_args()
     return asyncio.run(_amain(args))
 
