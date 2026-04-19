@@ -53,7 +53,7 @@ def main() -> int:
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=8,
+        default=4,
         help="Parallel download workers",
     )
     parser.add_argument(
@@ -92,7 +92,7 @@ def main() -> int:
     print(f"Downloading {repo_id} → {outputs_dir} ...")
     print("Download is resumable — safe to interrupt and re-run.\n")
 
-    max_attempts = 8
+    max_attempts = 100
     for attempt in range(1, max_attempts + 1):
         try:
             snapshot_download(
