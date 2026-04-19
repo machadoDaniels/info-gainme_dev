@@ -15,11 +15,22 @@ CONFIGS_TARGET="${CONFIGS_TARGET:-configs/full/8b/}"
 
 export MODE="${MODE:-single}"
 
-# Dynamic ports based on SLURM_JOB_ID to avoid conflicts
-# Formula: 8000 + (JOB_ID % 1000) for base, then +0 and +1 for MODEL1 and MODEL2
-BASE_PORT=$((8000 + (SLURM_JOB_ID % 1000)))
-export MODEL1_PORT="${MODEL1_PORT:-$((BASE_PORT))}"
-export MODEL2_PORT="${MODEL2_PORT:-$((BASE_PORT + 1))}"
+# Dynamic ports based on SLURM_JOB_ID to avoid conflicts.
+# Multiply by 10 so a job needing up to 2 ports (base, base+1) can never collide
+# with neighboring JOB_IDs (previous bug: consecutive job IDs shared a port).
+BASE_PORT=$((8000 + (SLURM_JOB_ID % 500) * 10))
+DEFAULT_MODEL1_PORT=$BASE_PORT
+DEFAULT_MODEL2_PORT=$((BASE_PORT + 1))
+
+# If either port is already bound on this node, advance to the next free pair.
+port_in_use() { ss -tln 2>/dev/null | awk '{print $4}' | grep -qE ":$1$"; }
+while port_in_use $DEFAULT_MODEL1_PORT || port_in_use $DEFAULT_MODEL2_PORT; do
+    DEFAULT_MODEL1_PORT=$((DEFAULT_MODEL1_PORT + 2))
+    DEFAULT_MODEL2_PORT=$((DEFAULT_MODEL2_PORT + 2))
+done
+
+export MODEL1_PORT="${MODEL1_PORT:-$DEFAULT_MODEL1_PORT}"
+export MODEL2_PORT="${MODEL2_PORT:-$DEFAULT_MODEL2_PORT}"
 
 export MODEL1="${MODEL1:-Qwen/Qwen3-4B-Thinking-2507}"
 export MODEL1_NAME="${MODEL1_NAME:-Qwen3-4B-Thinking-2507}"
