@@ -125,20 +125,22 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--all", action="store_true", help="Processa todos os runs.csv sob outputs/")
     group.add_argument("--runs", type=Path, help="Caminho para um runs.csv específico")
-    parser.add_argument("--model", default="gpt-4o-mini", help="Modelo LLM para síntese")
-    parser.add_argument("--base-url", default=None, help="Base URL do servidor LLM (padrão: OpenAI)")
+    parser.add_argument("--model", default="nvidia/Kimi-K2.5-NVFP4", help="Modelo LLM para síntese")
+    parser.add_argument("--base-url", default="http://200.137.197.131:60002/v1", help="Base URL do servidor LLM")
+    parser.add_argument("--api-key", default="NINGUEM-TA-PURO-2K26", help="API key do servidor LLM")
     parser.add_argument("--workers", type=int, default=8, help="Conversas paralelas por experimento")
     parser.add_argument("--turn-workers", type=int, default=4, help="Chamadas LLM paralelas por conversa")
     args = parser.parse_args()
 
     import os
-    api_key = os.getenv("OPENAI_API_KEY", "EMPTY")
+    api_key = args.api_key or os.getenv("OPENAI_API_KEY", "NINGUEM-TA-PURO-2K26")
     llm_config = LLMConfig(
         model=args.model,
         api_key=api_key,
         base_url=args.base_url,
         timeout=120.0,
     )
+    logger.info("🤖 Modelo: %s @ %s", args.model, args.base_url)
 
     with logging_redirect_tqdm():
         if args.all:
