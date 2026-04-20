@@ -16,9 +16,13 @@ Columns:
     experiment, domain, mode (fo/po), cot (0/1),
     target, run_index,
     turn, question, oracle_answer,
-    question_type_rationale, question_type, subclass, subclass_rationale,
+    question_type_rationale, question_type, subclasses_rationale, subclasses,
     redundancy, redundant_with_turn,
     error (empty on success)
+
+``subclasses`` is a ";"-joined string (e.g. "comparative;quantitative_threshold")
+so the CSV stays flat. Split with ``df.subclasses.str.split(";")`` in pandas
+or explode the tags for per-tag aggregation.
 """
 
 from __future__ import annotations
@@ -70,8 +74,8 @@ COLUMNS = [
     "oracle_answer",
     "question_type_rationale",
     "question_type",
-    "subclass",
-    "subclass_rationale",
+    "subclasses_rationale",
+    "subclasses",
     "redundancy",
     "redundant_with_turn",
     "error",
@@ -99,24 +103,48 @@ def iter_rows(conv: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for t in conv.get("turns", []):
         cls = t.get("classification", {}) or {}
-        sub = cls.get("subclass") or {}
+        is_error = "error" in cls
+        subclasses, subclasses_rationale = _extract_subclasses(cls)
         row = dict(base)
         row.update(
             {
                 "turn": t.get("turn", ""),
                 "question": (t.get("question") or "").replace("\n", " ").strip(),
                 "oracle_answer": (t.get("oracle_answer") or "").replace("\n", " ").strip(),
-                "question_type_rationale": cls.get("question_type_rationale", "") if "error" not in cls else "",
-                "question_type": cls.get("question_type", "") if "error" not in cls else "",
-                "subclass": sub.get("proposed_class", "") if isinstance(sub, dict) else "",
-                "subclass_rationale": (sub.get("subclass_rationale") or sub.get("rationale", "")) if isinstance(sub, dict) else "",
-                "redundancy": cls.get("redundancy", "") if "error" not in cls else "",
-                "redundant_with_turn": cls.get("redundant_with_turn", "") if "error" not in cls else "",
+                "question_type_rationale": "" if is_error else cls.get("question_type_rationale", ""),
+                "question_type": "" if is_error else cls.get("question_type", ""),
+                "subclasses_rationale": subclasses_rationale,
+                "subclasses": ";".join(subclasses),
+                "redundancy": "" if is_error else cls.get("redundancy", ""),
+                "redundant_with_turn": "" if is_error else cls.get("redundant_with_turn", ""),
                 "error": cls.get("error", ""),
             }
         )
         rows.append(row)
     return rows
+
+
+def _extract_subclasses(cls: dict[str, Any]) -> tuple[list[str], str]:
+    """Return (subclasses, rationale) handling both the new flat shape and the
+    legacy nested one (``subclass: {proposed_class, rationale}``).
+    """
+    if "error" in cls:
+        return [], ""
+    # New shape: flat list at top level.
+    if "subclasses" in cls:
+        raw = cls.get("subclasses") or []
+        tags = [str(x).strip() for x in raw if str(x).strip()]
+        rationale = cls.get("subclasses_rationale", "") or cls.get("subclass_rationale", "") or ""
+        return tags, rationale
+    # Legacy shape: single object under "subclass".
+    sub = cls.get("subclass")
+    if isinstance(sub, dict):
+        label = sub.get("proposed_class", "").strip()
+        rat = sub.get("subclass_rationale") or sub.get("rationale", "") or ""
+        return ([label] if label else []), rat
+    if isinstance(sub, str) and sub.strip():
+        return [sub.strip()], cls.get("subclass_rationale", "") or ""
+    return [], ""
 
 
 def main() -> int:

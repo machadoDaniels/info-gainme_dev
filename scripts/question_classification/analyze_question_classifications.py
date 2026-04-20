@@ -115,9 +115,24 @@ def redundancy_by_model(df: pd.DataFrame) -> pd.DataFrame:
     return _crosstab_with_rates(df, "seeker", "redundancy", REDUNDANCY_TYPES)
 
 
+def _explode_subclasses(df: pd.DataFrame) -> pd.DataFrame:
+    """Explode the ``;``-joined ``subclasses`` column into one row per tag."""
+    if "subclasses" not in df.columns:
+        return pd.DataFrame(columns=list(df.columns) + ["subclass"])
+    expanded = df.assign(
+        subclass=df["subclasses"].fillna("").astype(str).str.split(";")
+    ).explode("subclass")
+    expanded["subclass"] = expanded["subclass"].astype(str).str.strip()
+    return expanded[expanded["subclass"] != ""]
+
+
 def subclass_by_model(df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
-    """Top-N subclass tags per seeker, long format."""
-    sc = df[df["subclass"].notna() & (df["subclass"].astype(str) != "")].copy()
+    """Top-N subclass tags per seeker, long format.
+
+    Counts each tag individually: a turn tagged ``["comparative", "quantitative_threshold"]``
+    contributes to both rows.
+    """
+    sc = _explode_subclasses(df)
     if sc.empty:
         return pd.DataFrame(columns=["seeker", "subclass", "count", "rank"])
     counts = sc.groupby(["seeker", "subclass"]).size().rename("count").reset_index()
@@ -126,7 +141,21 @@ def subclass_by_model(df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
 
 
 def by_model_summary(df: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
-    """Headline table: one row per seeker model."""
+    """Headline table: one row per seeker model.
+
+    Subclass-derived rates (``hierarchical_rate``, ``fine_grained_rate``,
+    ``comparative_rate``) are computed against the total turn count: each turn
+    that carries the tag in its ``subclasses`` list counts once, regardless of
+    how many other tags the same turn has.
+    """
+    exploded = _explode_subclasses(df)
+    # turn_count[seeker][subclass] = # turns with that tag
+    per_seeker_tag = (
+        exploded.groupby(["seeker", "subclass"]).size().unstack(fill_value=0)
+        if not exploded.empty
+        else pd.DataFrame()
+    )
+
     rows: list[dict] = []
     for seeker, g in df.groupby("seeker"):
         total = len(g)
@@ -134,7 +163,7 @@ def by_model_summary(df: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
             continue
         qt = g["question_type"].value_counts()
         red = g["redundancy"].value_counts()
-        sc = g["subclass"].value_counts() if "subclass" in g else pd.Series(dtype=int)
+        tags = per_seeker_tag.loc[seeker] if seeker in per_seeker_tag.index else pd.Series(dtype=int)
 
         redundant_n = sum(red.get(k, 0) for k in ("exact_duplicate", "semantic_equivalent", "strictly_implied"))
         row = {
@@ -146,8 +175,9 @@ def by_model_summary(df: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
             "semantic_rate": qt.get("semantic", 0) / total,
             "lexical_rate": qt.get("lexical", 0) / total,
             "direct_guess_rate": qt.get("direct_guess", 0) / total,
-            "hierarchical_rate": sc.get("hierarchical_category", 0) / total if not sc.empty else 0.0,
-            "fine_grained_rate": sc.get("fine_grained_category", 0) / total if not sc.empty else 0.0,
+            "hierarchical_rate": tags.get("hierarchical_category", 0) / total,
+            "fine_grained_rate": tags.get("fine_grained_category", 0) / total,
+            "comparative_rate": tags.get("comparative", 0) / total,
         }
         rows.append(row)
     summary = pd.DataFrame(rows)
@@ -187,6 +217,7 @@ def by_model_summary(df: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
         "redundancy_rate",
         "hierarchical_rate",
         "fine_grained_rate",
+        "comparative_rate",
         "direct_guess_rate",
         "semantic_rate",
         "lexical_rate",
