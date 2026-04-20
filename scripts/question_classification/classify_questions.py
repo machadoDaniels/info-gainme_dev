@@ -85,11 +85,17 @@ class SubClass(BaseModel):
     Orthogonal to ``question_type``: a ``semantic`` question can also carry a
     ``subclass`` like ``comparative_size`` or ``relational``. Use whenever a
     more specific label is relevant, regardless of the primary type.
+
+    Field order parallels ``QuestionClassification``: the rationale comes
+    BEFORE the label so the model reasons before committing to a tag.
     """
 
-    # Rationale is nice-to-have but models sometimes omit it; don't reject.
-    rationale: str = Field(
+    # Rationale first (CoT-style structured output). ``rationale`` accepted as
+    # an alias for backward-compat with earlier schemas.
+    subclass_rationale: str = Field(
         default="",
+        validation_alias=AliasChoices("subclass_rationale", "rationale"),
+        serialization_alias="subclass_rationale",
         description="Why this specific sub-class is the right tag for this question.",
     )
     # Models use various field names for the label — accept the common ones.
@@ -107,8 +113,21 @@ class SubClass(BaseModel):
 
 
 class QuestionClassification(BaseModel):
-    """Structured output — one per question."""
+    """Structured output — one per question.
 
+    Field order matters: rationale fields come BEFORE the class they justify,
+    so the model reasons before committing to a label (chain-of-thought-style
+    structured output).
+    """
+
+    question_type_rationale: str = Field(
+        default="",
+        description=(
+            "One short sentence explaining why this question_type was chosen. "
+            "Required when the classifier produces a new classification; "
+            "defaults to empty string only for backward-compat with older JSONs."
+        ),
+    )
     question_type: QuestionType
     subclass: SubClass | None = Field(
         default=None,
@@ -132,7 +151,7 @@ class QuestionClassification(BaseModel):
         """Accept a bare string for ``subclass`` (shorthand) and convert to object."""
         if isinstance(v, dict) and isinstance(v.get("subclass"), str):
             label = v["subclass"].strip()
-            v["subclass"] = {"proposed_class": label, "rationale": ""} if label else None
+            v["subclass"] = {"proposed_class": label, "subclass_rationale": ""} if label else None
         return v
 
 
@@ -235,14 +254,18 @@ def discover_conversations(outputs_root: Path) -> dict[Stratum, list[Path]]:
 
 def stratified_sample(
     buckets: dict[Stratum, list[Path]],
-    per_stratum: int,
+    per_stratum: int | None,
     rng: random.Random,
 ) -> list[tuple[Stratum, Path]]:
+    """When ``per_stratum`` is None, take every conversation in every stratum."""
     picks: list[tuple[Stratum, Path]] = []
     for stratum, paths in buckets.items():
         if not paths:
             continue
-        chosen = rng.sample(paths, min(per_stratum, len(paths)))
+        if per_stratum is None:
+            chosen = list(paths)
+        else:
+            chosen = rng.sample(paths, min(per_stratum, len(paths)))
         picks.extend((stratum, p) for p in chosen)
     return picks
 
@@ -265,6 +288,8 @@ For each question, decide THREE things.
 - **direct_guess** — names a specific candidate. Examples: "Is it Mumbai?", "Is it a guitar?", "Is it dengue?".
 - **malformed**    — not a valid yes/no question at all. Examples: "Yes.", "intertrigo", "[Oracle] - No", "What is the disease?" (open-ended), a statement instead of a question. Pick this when the seeker violated the game's Q&A format.
 - **other**        — truly does not fit any of the above. Rare.
+
+Always fill `question_type_rationale` with ONE short sentence explaining why you chose that class (mirroring what `subclass.subclass_rationale` does for the sub-tag). Never leave it empty.
 
 ### 2. subclass (OPTIONAL — supplementary tag, orthogonal to question_type)
 
@@ -290,8 +315,8 @@ You may also coin a NEW snake_case label if the question clearly warrants one no
 `subclass` must be either `null` OR an **object** with TWO keys:
 
     {
-      "rationale":      "<one short sentence on why this label fits>",
-      "proposed_class": "<snake_case_label>"
+      "subclass_rationale": "<one short sentence on why this label fits>",
+      "proposed_class":     "<snake_case_label>"
     }
 
 **Never emit `subclass` as a bare string.** `"subclass": "hierarchical_category"` is WRONG. Always wrap it in the object, even when the label seems obvious — the rationale is mandatory whenever the field is non-null.
@@ -307,28 +332,32 @@ If redundancy is not `none`, set `redundant_with_turn` to the 1-indexed turn of 
 
 ### Worked examples
 
+Emit fields in the exact order shown — rationale BEFORE its class — so your reasoning precedes the label, not the other way around.
+
 Example A — semantic + hierarchical_category, no redundancy:
 
     Question: "Is the target disease primarily affecting the respiratory system?"
     →
     {
+      "question_type_rationale": "Uses medical-domain knowledge to categorise the target by affected organ system.",
       "question_type": "semantic",
       "subclass": {
-        "rationale": "Asks about a broad organ-system category, a high-level taxonomic bucket.",
+        "subclass_rationale": "Asks about a broad organ-system category, a high-level taxonomic bucket.",
         "proposed_class": "hierarchical_category"
       },
       "redundancy": "none",
       "redundant_with_turn": null
     }
 
-Example B — malformed (statement), no subclass rationale would be wrong:
+Example B — malformed (statement):
 
     Question: "Johannesburg."
     →
     {
+      "question_type_rationale": "Bare noun with no interrogative structure; violates the yes/no-question format of the game.",
       "question_type": "malformed",
       "subclass": {
-        "rationale": "Bare noun, no interrogative structure — a candidate statement rather than a yes/no question.",
+        "subclass_rationale": "A candidate name declared as a statement rather than asked about.",
         "proposed_class": "statement"
       },
       "redundancy": "none",
@@ -341,6 +370,7 @@ Example C — direct_guess that is strictly implied by a prior endocrine-system 
     Question (T11): "Is the target hypothyroidism?"
     →
     {
+      "question_type_rationale": "Names a specific candidate (hypothyroidism) rather than probing an attribute.",
       "question_type": "direct_guess",
       "subclass": null,
       "redundancy": "strictly_implied",
@@ -525,7 +555,7 @@ def summarise(conv_results: list[dict[str, Any]]) -> dict[str, Any]:
                     subclass_examples.append(
                         {
                             "proposed_class": pc,
-                            "rationale": sub.get("rationale", ""),
+                            "subclass_rationale": sub.get("subclass_rationale") or sub.get("rationale", ""),
                             "question_type": qt,
                             "question": turn["question"],
                             "domain": conv["domain"],
@@ -577,7 +607,8 @@ async def _amain(args: argparse.Namespace) -> int:
         for st, paths in sorted(buckets.items(), key=lambda kv: (kv[0].domain, kv[0].mode, kv[0].cot)):
             print(f"  {st.domain}/{st.mode}/{'cot' if st.cot else 'no_cot'} [{st.model_slug}/{st.experiment}]: {len(paths)}")
         picks = stratified_sample(buckets, args.per_stratum, rng)
-        print(f"Sampled {len(picks)} conversations (per_stratum={args.per_stratum}, seed={args.seed}).")
+        label = "all" if args.per_stratum is None else args.per_stratum
+        print(f"Sampled {len(picks)} conversations (per_stratum={label}, seed={args.seed}).")
 
     if args.dry_run:
         for st, path in picks:
@@ -679,7 +710,15 @@ def main() -> int:
         default=None,
         help="Classify a single seeker.json (overrides sampling).",
     )
-    p.add_argument("--per-stratum", type=int, default=3, help="Conversations sampled per stratum.")
+    p.add_argument(
+        "--per-stratum",
+        type=int,
+        default=None,
+        help=(
+            "Conversations sampled per stratum. Default: None = full sweep "
+            "(every conversation in every stratum). Pass an integer to cap."
+        ),
+    )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
         "--max-concurrency",

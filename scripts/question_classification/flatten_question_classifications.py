@@ -16,7 +16,7 @@ Columns:
     experiment, domain, mode (fo/po), cot (0/1),
     target, run_index,
     turn, question, oracle_answer,
-    question_type, subclass, subclass_rationale,
+    question_type_rationale, question_type, subclass, subclass_rationale,
     redundancy, redundant_with_turn,
     error (empty on success)
 """
@@ -68,6 +68,7 @@ COLUMNS = [
     "turn",
     "question",
     "oracle_answer",
+    "question_type_rationale",
     "question_type",
     "subclass",
     "subclass_rationale",
@@ -105,9 +106,10 @@ def iter_rows(conv: dict[str, Any]) -> list[dict[str, Any]]:
                 "turn": t.get("turn", ""),
                 "question": (t.get("question") or "").replace("\n", " ").strip(),
                 "oracle_answer": (t.get("oracle_answer") or "").replace("\n", " ").strip(),
+                "question_type_rationale": cls.get("question_type_rationale", "") if "error" not in cls else "",
                 "question_type": cls.get("question_type", "") if "error" not in cls else "",
                 "subclass": sub.get("proposed_class", "") if isinstance(sub, dict) else "",
-                "subclass_rationale": sub.get("rationale", "") if isinstance(sub, dict) else "",
+                "subclass_rationale": (sub.get("subclass_rationale") or sub.get("rationale", "")) if isinstance(sub, dict) else "",
                 "redundancy": cls.get("redundancy", "") if "error" not in cls else "",
                 "redundant_with_turn": cls.get("redundant_with_turn", "") if "error" not in cls else "",
                 "error": cls.get("error", ""),
