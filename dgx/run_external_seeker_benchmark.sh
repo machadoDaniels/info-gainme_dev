@@ -27,8 +27,12 @@ umask 002
 # ============================================
 CONFIGS_TARGET="${CONFIGS_TARGET:-configs/full/235b/no_cot/}"
 
-BASE_PORT=$((8000 + (SLURM_JOB_ID % 1000)))
-export MODEL1_PORT="${MODEL1_PORT:-${BASE_PORT}}"
+# Spread ports so consecutive JOB_IDs don't collide (previous bug used %1000).
+BASE_PORT=$((8000 + (SLURM_JOB_ID % 500) * 10))
+DEFAULT_MODEL1_PORT=$BASE_PORT
+port_in_use() { ss -tln 2>/dev/null | awk '{print $4}' | grep -qE ":$1$"; }
+while port_in_use $DEFAULT_MODEL1_PORT; do DEFAULT_MODEL1_PORT=$((DEFAULT_MODEL1_PORT + 2)); done
+export MODEL1_PORT="${MODEL1_PORT:-${DEFAULT_MODEL1_PORT}}"
 
 export MODEL1="${MODEL1:-Qwen/Qwen3-8B}"
 export MODEL1_NAME="${MODEL1_NAME:-Qwen3-8B}"

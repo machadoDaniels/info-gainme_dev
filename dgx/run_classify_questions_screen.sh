@@ -1,5 +1,5 @@
 #!/bin/bash
-# Roda o classificador de perguntas (scripts/classify_questions.py) na DGX via Singularity.
+# Roda o classificador de perguntas (scripts/question_classification/classify_questions.py) na DGX via Singularity.
 # Sem SLURM — pensado para ser executado dentro de um screen.
 #
 # Lançamento típico:
@@ -51,7 +51,7 @@ echo "Seed:            ${SEED}"
 echo "Flags:           ${EXTRA_FLAGS:-(default: thinking on, resume on)}"
 echo "=========================================="
 
-CLASSIFY_CMD="python3 scripts/classify_questions.py \
+CLASSIFY_CMD="python3 scripts/question_classification/classify_questions.py \
     --base-url '${BASE_URL}' \
     --api-key  '${API_KEY}' \
     --model    '${MODEL}' \

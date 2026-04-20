@@ -92,7 +92,7 @@ def main() -> int:
     print(f"Downloading {repo_id} → {outputs_dir} ...")
     print("Download is resumable — safe to interrupt and re-run.\n")
 
-    max_attempts = 100
+    max_attempts = 200
     for attempt in range(1, max_attempts + 1):
         try:
             snapshot_download(

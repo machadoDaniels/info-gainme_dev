@@ -63,20 +63,36 @@ Configs in `configs/human/` cover all three domains × FO/PO. Oracle and Pruner 
 
 **Automated (recommended): Single SLURM job with vLLM + benchmarks**
 
-Start vLLM and run all configs in one job:
+Start vLLM and run all configs in one job. `CONFIGS_TARGET` is passed via `--export`, not as a positional arg:
+
 ```bash
-sbatch dgx/run_full_benchmark.sh configs/full/4b/                  # all 4b configs
-sbatch dgx/run_full_benchmark.sh configs/full/4b/cot/geo_160_4b_thinking_fo_cot.yaml  # single config
+# pasta inteira
+sbatch --partition=h100n2 --gres=gpu:2 \
+  --export=ALL,MODEL1=Qwen/Qwen3-4B-Thinking-2507,MODEL1_NAME=Qwen3-4B-Thinking-2507,MODEL2=Qwen/Qwen3-8B,MODEL2_NAME=Qwen3-8B,MODE=dual,CONFIGS_TARGET=configs/full/4b/cot/ \
+  dgx/run_full_benchmark.sh
+# config individual: aponte CONFIGS_TARGET para o .yaml específico
 ```
 
 This script:
-1. Allocates N GPUs (one per model)
-2. Starts vLLM servers in background (with automatic readiness polling)
-3. Updates `configs/servers.yaml` with the real node IP
-4. Runs all configs from the given folder sequentially
-5. Kills vLLM when done
+1. Allocates the GPUs requested via `--gres` (usually `gpu:2` for dual mode)
+2. Starts vLLM servers in background with `wait_vllm_ready` (abort if process dies or readiness times out)
+3. Creates `.servers_override_<JOBID>.yaml` with the real node IP — passed to `benchmark_runner.py` via `--servers-override`
+4. Runs all configs under `CONFIGS_TARGET` sequentially (with resume)
+5. Kills vLLM and cleans up the override file when done
 
-Models are configurable at the top of `dgx/run_full_benchmark.sh`. Defaults: `Qwen3-4B-Thinking-2507` (seeker) + `Qwen3-8B` (oracle/pruner). Override via `sbatch --export=ALL,MODEL1=...,MODEL2=...,CONFIGS_TARGET=configs/full/4b/ dgx/run_full_benchmark.sh`. Key overridable vars: `MODEL1`, `MODEL1_NAME`, `MODEL2`, `MODEL2_NAME`, `MODE` (`single`/`dual`), `CONFIGS_TARGET`, `MODEL1_PORT`, `MODEL2_PORT` (ports default to `8000 + (JOB_ID % 1000)` and `+1`).
+Defaults in the script: `Qwen3-4B-Thinking-2507` (seeker) + `Qwen3-8B` (oracle/pruner) in `dual` mode. **Always override via `--export=ALL,...`** — the old "positional arg" style is not supported.
+
+Key overridable vars (all via `--export=ALL,KEY=VAL,...`):
+- `MODEL1`, `MODEL1_NAME` — seeker HF id + served-model name
+- `MODEL2`, `MODEL2_NAME` — oracle/pruner HF id + served-model name
+- `MODE=single|dual` (default `single`; use `dual` when seeker ≠ oracle model)
+- `CONFIGS_TARGET` — folder or single `.yaml`
+- `MODEL1_PORT`, `MODEL2_PORT` — override auto-assigned ports (base formula `8000 + (JOB_ID % 500) * 10`; script also probes with `ss -tln` and advances if busy)
+- `MODEL1_MAX_LEN`, `MODEL2_MAX_LEN` — vLLM `--max-model-len` per model (default 32000)
+- `MODEL1_GPU_MEM`, `MODEL2_GPU_MEM` — `--gpu-memory-utilization` (default 0.90)
+- `MODEL1_REASONING_PARSER`, `MODEL2_REASONING_PARSER` — optional `--reasoning-parser` flag
+- `VLLM_MAX_NUM_SEQS` (default 32), `VLLM_ENFORCE_EAGER` (auto by partition), `VLLM_ENGINE_READY_TIMEOUT_S` (default 1800)
+- `RUNS_PER_TARGET` — forwarded to `benchmark_runner.py --runs-per-target` (override `dataset.runs_per_target` in the YAML)
 
 **External seeker** (seeker endpoint already in `configs/servers.yaml`): brings up only oracle/pruner locally.
 ```bash
@@ -255,8 +271,8 @@ outputs/
 
 **Compute:**
 - Models served via **vLLM** (OpenAI-compatible API)
-- Benchmarks & analysis run inside **Singularity** container (`vllm_openai_latest.sif`)
-- Typically on DGX H100 nodes with `OPENAI_API_KEY` in `.env`
+- Benchmarks & analysis run inside **Singularity** container (`/raid/user_danielpedrozo/images/vllm_openai_latest.sif`)
+- Runs on DGX nodes: `h100n2` and `h100n3` (8× H100 80GB each) and `b200n1` (8× B200 180GB). `OPENAI_API_KEY` + `HF_TOKEN` must be in `.env`. Each node has its own independent `/raid` — see "Syncing between nodes" below.
 
 **Singularity bind mounts:** The host path `/raid/user_danielpedrozo` is mounted as `/workspace` inside the container (`--bind /raid/user_danielpedrozo:/workspace --pwd /workspace`). Config file paths should use host paths; the scripts handle the translation.
 
@@ -265,9 +281,90 @@ outputs/
 - `umask 002` is set in dgx scripts so new files are group-writable by default
 
 **vLLM orchestration (`run_full_benchmark.sh`):**
-- Ports are derived from `SLURM_JOB_ID` (`BASE_PORT = 8000 + (JOB_ID % 1000)`) to avoid conflicts across concurrent jobs
+- Ports derived from `SLURM_JOB_ID` with gap of 10 between neighbours (`BASE_PORT = 8000 + (JOB_ID % 500) * 10`) + `ss -tln` check to avoid collisions when jobs land on the same node
 - With 1 GPU all agents share one model; with 2+ GPUs seeker gets `MODEL1`, oracle/pruner get `MODEL2`
-- Script polls `GET /v1/models` before starting benchmarks to confirm vLLM is ready
-- Creates `.servers_override_<JOBID>.yaml` with the actual node IP; clean up manually after the job ends
+- `wait_vllm_ready` polls `GET /v1/models` with a timeout (default 1800s) and aborts early if the vLLM process dies (`kill -0` check) — avoids the classic "job stuck forever" when vLLM silently fails
+- vLLM startup + download timeout is controlled by `VLLM_ENGINE_READY_TIMEOUT_S` (default 1800s; large models may need 3600s+)
+- `VLLM_MAX_NUM_SEQS` tunes concurrent requests on the vLLM side (default 32)
+- `VLLM_ENFORCE_EAGER` auto-detected by partition: **omitted on `b200*`** (CUDA graphs pay off on Blackwell), **enabled on `h100*`** (faster startup). Override via `--export=ALL,VLLM_ENFORCE_EAGER=true|false,...`
+- Creates `.servers_override_<JOBID>.yaml` with the actual node IP; the script deletes it at the end, but a crash leaves stale files in the project root — safe to remove manually
+- vLLM logs are at `logs/info-gainme-full-<JOBID>-vllm-<MODELNAME>.log` (stderr from both the host-side `singularity exec` and the in-container Python are merged there — useful when startup fails)
 
 **Data creation scripts:** `data/create_geo_160.py` and `data/create_diseases_160.py` regenerate the dataset CSVs from external sources (GeoNames API, etc.) if the raw data needs to be rebuilt.
+
+## Running on different GPU partitions
+
+Each DGX node has its own `/raid` filesystem — the project dir, `outputs/`, `hf-cache/`, and `images/` are **not shared across nodes**. Clone/sync when moving between nodes (see below).
+
+**Available partitions** (check with `sinfo`):
+
+| Partition | Node | GPUs | Use case |
+|---|---|---|---|
+| `h100n2` | `dgx-H100-02` | 8× H100 80GB | default "daniel" partition |
+| `h100n3` | `dgx-H100-03` | 8× H100 80GB | "julia" partition (see alias below) |
+| `b200n1` | `dgx-B200-1` | 8× B200 180GB | Blackwell — largest VRAM |
+
+**Partition choice via `sbatch --partition=<name>`** when submitting. The `run_full_benchmark.sh` script auto-detects `b200*` and adjusts vLLM flags (drops `--enforce-eager`).
+
+**Examples:**
+
+```bash
+# H100 (daniel, partition h100n2)
+sbatch --partition=h100n2 --gres=gpu:2 \
+  --export=ALL,MODEL1=Qwen/Qwen3-4B-Thinking-2507,MODEL1_NAME=Qwen3-4B-Thinking-2507,MODEL2=Qwen/Qwen3-8B,MODEL2_NAME=Qwen3-8B,MODE=dual,CONFIGS_TARGET=configs/full/4b/cot/ \
+  dgx/run_full_benchmark.sh
+
+# B200 (daniel, partition b200n1 — CUDA graphs auto-enabled)
+sbatch --partition=b200n1 --gres=gpu:2 \
+  --export=ALL,VLLM_ENGINE_READY_TIMEOUT_S=3600,MODEL1=allenai/Olmo-3.1-32B-Think,MODEL1_NAME=Olmo-3.1-32B-Think,MODEL2=Qwen/Qwen3-8B,MODEL2_NAME=Qwen3-8B,MODE=dual,CONFIGS_TARGET=configs/full/olmo3-32b/cot/ \
+  dgx/run_full_benchmark.sh
+```
+
+Large (30B+) models benefit from `VLLM_ENGINE_READY_TIMEOUT_S=3600` to cover the HuggingFace download + engine core init. Very large models (64GB+ weights) may need dual-GPU with tensor parallelism (`--tensor-parallel-size` — not currently exposed by `run_full_benchmark.sh`; use `dgx/run_vllm_single_model.sh` instead or add the flag manually).
+
+## Running as another user via `asjulia` alias
+
+The project is frequently split so that `user_juliadollis` runs on `h100n3` and `user_danielpedrozo` runs on `h100n2` / `b200n1`. An alias `asjulia` is defined in `~/.bashrc`:
+
+```bash
+asjulia() { ssh -t user_juliadollis@localhost "bash -i -lc $(printf '%q' "$*")"; }
+```
+
+It runs a command as `user_juliadollis` via local SSH. Julia has read access to the project directory under `/raid/user_danielpedrozo/` on each node. Writing requires the shared group `sd22` + `g+w` on target dirs (see File permissions above).
+
+Usage pattern (Claude Code can invoke this via Bash):
+```bash
+bash -ic 'asjulia "cd /raid/user_danielpedrozo/projects/info-gainme_dev; sbatch --partition=h100n3 --gres=gpu:2 --export=ALL,...,CONFIGS_TARGET=... dgx/run_full_benchmark.sh"'
+```
+
+Gotchas:
+- Bash interpretation: inside the outer double quotes, `&&` is interpreted by the outer shell. Use `;` between commands to keep them on the SSH side (or escape: `\&\&`).
+- Job submitter must `cd` into the project directory; SSH starts in `/home/<user>` by default.
+- Check julia's queue: `bash -ic 'asjulia "squeue -u user_juliadollis"'` — equivalent alias `sqj` exists in `.bashrc`.
+
+## Syncing between nodes
+
+Each DGX has its own `/raid` (separate filesystems) — use `rsync` to move configs/code/outputs:
+
+```bash
+# sync scripts + configs n2 → n3 (excluding large stuff)
+rsync -av --exclude='outputs' --exclude='logs' --exclude='hf-cache' --exclude='.git' \
+  --exclude='.venv' --exclude='*.sif' \
+  /raid/user_danielpedrozo/projects/info-gainme_dev/ \
+  user_danielpedrozo@10.100.0.113:/raid/user_danielpedrozo/projects/info-gainme_dev/
+
+# use git pull in H100-03 if remote is tracked
+ssh 10.100.0.113 'cd /raid/user_danielpedrozo/projects/info-gainme_dev; git fetch origin; git reset --hard origin/main'
+```
+
+**Node IPs** (internal network):
+- `dgx-H100-02` — `10.100.0.112`
+- `dgx-H100-03` — `10.100.0.113`
+- `dgx-B200-1` — `10.100.0.121`
+
+**Cross-user rsync:** if files on the target belong to another user, pull from the target as that user instead of pushing:
+```bash
+bash -ic 'asjulia "cd /raid/user_danielpedrozo/projects/info-gainme_dev; \
+  rsync -a --update user_juliadollis@10.100.0.112:/raid/user_danielpedrozo/projects/info-gainme_dev/outputs/models/<triple>/ \
+    outputs/models/<triple>/"'
+```

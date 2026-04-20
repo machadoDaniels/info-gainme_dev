@@ -38,24 +38,51 @@ Configs disponíveis em `configs/human/`: `geo`, `objects` e `diseases` × `fo`/
 
 ### Via SLURM com vLLM - DGX
 
-Sobe os servidores vLLM e roda os benchmarks em um único job SLURM:
+Sobe os servidores vLLM e roda os benchmarks em um único job SLURM. Precisa escolher partição + modelos via `--export`:
 
 ```bash
-# Seeker local — sobe todos os modelos necessários
-sbatch dgx/run_full_benchmark.sh configs/full/4b/          # pasta inteira
-sbatch dgx/run_full_benchmark.sh configs/full/4b/cot/geo_160_4b_thinking_fo_cot.yaml  # config individual
+# H100 partition (default)
+sbatch --partition=h100n2 --gres=gpu:2 \
+  --export=ALL,MODEL1=Qwen/Qwen3-4B-Thinking-2507,MODEL1_NAME=Qwen3-4B-Thinking-2507,MODEL2=Qwen/Qwen3-8B,MODEL2_NAME=Qwen3-8B,MODE=dual,CONFIGS_TARGET=configs/full/4b/cot/ \
+  dgx/run_full_benchmark.sh
+
+# B200 partition (Blackwell — usa CUDA graphs automaticamente, mais rápido)
+sbatch --partition=b200n1 --gres=gpu:2 \
+  --export=ALL,MODEL1=allenai/Olmo-3-7B-Think,MODEL1_NAME=Olmo-3-7B-Think,MODEL2=Qwen/Qwen3-8B,MODEL2_NAME=Qwen3-8B,MODE=dual,CONFIGS_TARGET=configs/full/olmo3-7b/cot/ \
+  dgx/run_full_benchmark.sh
 
 # Seeker externo (endpoint já em configs/servers.yaml) — sobe só oracle/pruner
 sbatch dgx/run_external_seeker_benchmark.sh configs/full/235b/no_cot/
 sbatch dgx/run_external_seeker_benchmark.sh configs/full/llama-70b/no_cot/
 ```
 
-Monitore com `watch squeue -u $USER` e `tail -f logs/info-gainme-full-<JOBID>.out`.
+**Partições disponíveis:** `h100n2` (H100), `h100n3` (H100), `b200n1` (Blackwell 180GB). Cada node tem seu próprio `/raid` — **não compartilham filesystem** (sincronize configs/outputs via `rsync` quando mover entre nodes).
+
+**Env vars úteis** no `--export`:
+- `VLLM_MAX_NUM_SEQS=32` — requests vLLM paralelos (default 32)
+- `VLLM_ENGINE_READY_TIMEOUT_S=3600` — timeout de startup/download (aumente para modelos grandes)
+- `VLLM_ENFORCE_EAGER=true|false` — override da heurística por partição (auto-desativado em B200)
+- `RUNS_PER_TARGET=1` — passa `--runs-per-target` para o benchmark (default 3)
+
+Monitore com `watch squeue -u $USER` e `tail -f logs/info-gainme-full-<JOBID>.out`. Logs do vLLM ficam em `logs/info-gainme-full-<JOBID>-vllm-<MODEL_NAME>.log`.
+
+### Submetendo jobs como outro usuário (alias `asjulia`)
+
+Em fluxos multi-usuário (ex: rodar em `h100n3` como `user_juliadollis`), use o alias `asjulia` definido no `.bashrc`:
+
+```bash
+bash -ic 'asjulia "cd /raid/user_danielpedrozo/projects/info-gainme_dev; \
+  sbatch --partition=h100n3 --gres=gpu:2 \
+    --export=ALL,MODEL1=...,MODEL1_NAME=...,MODEL2=...,MODEL2_NAME=...,MODE=dual,CONFIGS_TARGET=... \
+    dgx/run_full_benchmark.sh"'
+```
+
+Use `;` entre comandos dentro das aspas (o shell externo interpretaria `&&`). Consulte fila da julia com `bash -ic 'asjulia "squeue -u user_juliadollis"'` (ou alias `sqj`).
 
 Para adicionar um novo modelo:
-1. Adicione o endpoint em `configs/servers.yaml`
+1. Adicione o endpoint em `configs/servers.yaml` (para seeker externo) ou passe `MODEL1=<hf_repo>` no `--export` (para seeker local)
 2. Crie os configs em `configs/full/<modelo>/no_cot/` (e `cot/` se o modelo suportar thinking)
-3. Submeta com `sbatch dgx/run_external_seeker_benchmark.sh configs/full/<modelo>/no_cot/`
+3. Submeta com `sbatch dgx/run_external_seeker_benchmark.sh configs/full/<modelo>/no_cot/` ou `dgx/run_full_benchmark.sh`
 
 
 ### Sem subir vLLM (servidores já rodando)
