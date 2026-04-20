@@ -82,10 +82,19 @@ class RedundancyType(str, Enum):
 class QuestionClassification(BaseModel):
     """One classification per seeker turn.
 
-    Field order is deliberate: every rationale precedes its label, so the
-    model generates the justification first and commits to a class after.
+    Field order is deliberate: the echoed ``question`` anchors the entry to a
+    specific input turn (so we can detect the model dropping / reordering /
+    inventing turns), then every rationale precedes its label so the model
+    generates the justification first and commits to a class after.
     """
 
+    question: str = Field(
+        description=(
+            "The seeker's question for this turn, echoed VERBATIM from the input. "
+            "Used as an integrity anchor to verify the classification lines up with "
+            "the correct turn — do not paraphrase, summarise, or translate."
+        ),
+    )
     question_type_rationale: str = Field(
         default="",
         description="One short sentence on why this question_type fits.",
@@ -220,17 +229,18 @@ SYSTEM_PROMPT = """You are a taxonomist labelling yes/no questions asked by a se
 
 The seeker tries to identify a secret target (a city, an object, or a disease) by asking yes/no questions. You will receive the FULL Q&A history of one game and you must classify EVERY turn, in order.
 
-For each turn, produce SIX fields IN THIS EXACT ORDER:
+For each turn, produce SEVEN fields IN THIS EXACT ORDER:
 
-1. **question_type_rationale** — one short sentence explaining why your question_type fits.
-2. **question_type** — one of:
+1. **question** — the seeker's question for this turn, copied VERBATIM from the input (no paraphrasing, no trimming, no translation). This anchors the entry to the correct turn.
+2. **question_type_rationale** — one short sentence explaining why your question_type fits.
+3. **question_type** — one of:
    - `semantic`     uses domain knowledge (location, symptoms, attributes, taxonomy). E.g. "Is it in Asia?", "Does it affect the brain?".
    - `lexical`      asks about the NAME/STRING only, no domain meaning. E.g. "Does the name start with A?".
    - `direct_guess` names a specific candidate. E.g. "Is it Mumbai?", "Is it dengue?".
    - `malformed`    not a valid yes/no question: bare statement, open-ended, echoing the Oracle/Computer, etc.
    - `other`        genuinely does not fit any of the above (rare).
-3. **subclasses_rationale** — one short sentence justifying the chosen sub-class tag(s). Use `""` when `subclasses` is an empty list.
-4. **subclasses** — a LIST of snake_case sub-tags, orthogonal to question_type. The list may be empty (`[]`) when nothing sharper applies, or contain one OR MORE tags when multiple apply (e.g. a question that is both a comparison AND a numeric threshold: `["comparative", "quantitative_threshold"]`). Do not duplicate tags. Common tags (you may coin new ones):
+4. **subclasses_rationale** — one short sentence justifying the chosen sub-class tag(s). Use `""` when `subclasses` is an empty list.
+5. **subclasses** — a LIST of snake_case sub-tags, orthogonal to question_type. The list may be empty (`[]`) when nothing sharper applies, or contain one OR MORE tags when multiple apply (e.g. a question that is both a comparison AND a numeric threshold: `["comparative", "quantitative_threshold"]`). Do not duplicate tags. Common tags (you may coin new ones):
    - `hierarchical_category`    broad taxonomic level ("Is it an animal?")
    - `fine_grained_category`    narrow taxonomic level ("Is it a citrus fruit?")
    - `comparative`              any comparison to another entity — by size, age, frequency, etc. ("bigger than a microwave", "older than Rome")
@@ -239,12 +249,12 @@ For each turn, produce SIX fields IN THIS EXACT ORDER:
    - `compound_predicate`       conjoined conditions ("in Asia AND coastal?")
    - `meta_strategy`            about the game state, not the target
    - `statement`, `open_ended`  sub-types of `malformed`
-5. **redundancy** — one of:
+6. **redundancy** — one of:
    - `none`                brings new information.
    - `exact_duplicate`     literally the same wording as an earlier turn.
    - `semantic_equivalent` same question in different words (answer is determined).
    - `strictly_implied`    answer is already determined by prior Q&A.
-6. **redundant_with_turn** — 1-indexed earliest prior turn that makes this one redundant; `null` when redundancy is `none`. Redundancy for turn K is measured ONLY against turns 1..K-1 — never use information from later turns.
+7. **redundant_with_turn** — 1-indexed earliest prior turn that makes this one redundant; `null` when redundancy is `none`. Redundancy for turn K is measured ONLY against turns 1..K-1 — never use information from later turns.
 
 Return a JSON object with a single key `classifications` containing an array with EXACTLY ONE entry per turn, in the same order as the turns shown. No prose, no markdown fences.
 
@@ -259,6 +269,7 @@ Expected output:
     {
       "classifications": [
         {
+          "question": "Is the target disease primarily affecting the respiratory system?",
           "question_type_rationale": "Uses medical-domain knowledge to categorise the target by affected organ system.",
           "question_type": "semantic",
           "subclasses_rationale": "Asks about a broad organ-system category, a high-level taxonomic bucket.",
@@ -267,6 +278,7 @@ Expected output:
           "redundant_with_turn": null
         },
         {
+          "question": "Is it bigger than the common cold in mortality?",
           "question_type_rationale": "Probes a domain attribute (mortality) by comparison against a reference disease.",
           "question_type": "semantic",
           "subclasses_rationale": "Frames the attribute as a comparison with another entity, and the attribute itself is a numeric-like magnitude.",
@@ -275,6 +287,7 @@ Expected output:
           "redundant_with_turn": null
         },
         {
+          "question": "Is it the common cold?",
           "question_type_rationale": "Names a specific candidate rather than probing an attribute.",
           "question_type": "direct_guess",
           "subclasses_rationale": "",
@@ -284,19 +297,30 @@ Expected output:
         }
       ]
     }
+
+The `question` field MUST match the input turn's Q text character-for-character. If it does not, the classification will be flagged as misaligned and rejected.
 """
 
 
 def build_user_message(turns: list[TurnQA], domain: str) -> str:
     lines = [f"Domain: {domain}", "", f"Game turns ({len(turns)} total — classify every one, in order):"]
     for t in turns:
-        lines.append(f"  Turn {t.turn}: Q: {t.question}")
-        lines.append(f"           A: {t.oracle_answer}")
+        lines.append(f"  Turn {t.turn}: {t.question}")
     lines.append("")
     lines.append(
         f"Return a JSON object with key `classifications` — an array of EXACTLY {len(turns)} entries in turn order."
     )
     return "\n".join(lines)
+
+
+_WS_RE = re.compile(r"\s+")
+
+
+def _norm(s: str) -> str:
+    """Loose comparison for the question-echo integrity check: strips
+    surrounding whitespace and collapses internal whitespace runs, so a
+    stray extra space or newline does not trip the mismatch check."""
+    return _WS_RE.sub(" ", (s or "")).strip().lower()
 
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -350,6 +374,7 @@ async def classify_conversation_batch(
     got, want = len(batch.classifications), len(turns)
     if got != want:
         raise RuntimeError(f"model returned {got} classifications, expected {want}")
+
     return batch.classifications
 
 
@@ -367,15 +392,19 @@ async def classify_conversation(
         classifications = await classify_conversation_batch(
             client, model, turns, stratum.domain, thinking, semaphore
         )
-        turn_payloads = [
-            {
+        turn_payloads = []
+        for t, cls in zip(turns, classifications):
+            payload: dict[str, Any] = {
                 "turn": t.turn,
                 "question": t.question,
                 "oracle_answer": t.oracle_answer,
                 "classification": cls.model_dump(mode="json"),
             }
-            for t, cls in zip(turns, classifications)
-        ]
+            if _norm(cls.question) != _norm(t.question):
+                payload["question_echo_warning"] = (
+                    f"echoed={cls.question!r} differs from input={t.question!r}"
+                )
+            turn_payloads.append(payload)
     except Exception as e:  # noqa: BLE001 — bubble up as per-conversation error
         turn_payloads = [
             {

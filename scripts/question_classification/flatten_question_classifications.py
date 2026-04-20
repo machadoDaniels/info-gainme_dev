@@ -15,7 +15,7 @@ Columns:
     seeker, oracle, pruner, model_slug,
     experiment, domain, mode (fo/po), cot (0/1),
     target, run_index,
-    turn, question, oracle_answer,
+    turn, question, question_echoed, oracle_answer,
     question_type_rationale, question_type, subclasses_rationale, subclasses,
     redundancy, redundant_with_turn,
     error (empty on success)
@@ -71,6 +71,7 @@ COLUMNS = [
     "run_index",
     "turn",
     "question",
+    "question_echoed",
     "oracle_answer",
     "question_type_rationale",
     "question_type",
@@ -110,6 +111,7 @@ def iter_rows(conv: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "turn": t.get("turn", ""),
                 "question": (t.get("question") or "").replace("\n", " ").strip(),
+                "question_echoed": ("" if is_error else (cls.get("question") or "").replace("\n", " ").strip()),
                 "oracle_answer": (t.get("oracle_answer") or "").replace("\n", " ").strip(),
                 "question_type_rationale": "" if is_error else cls.get("question_type_rationale", ""),
                 "question_type": "" if is_error else cls.get("question_type", ""),
