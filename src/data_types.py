@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from enum import Enum
-from typing import Optional, Any
+from typing import Literal, Optional, Any
 from pydantic import BaseModel
 
 
@@ -22,7 +22,7 @@ class Question:
 
 class OracleResponse(BaseModel):
     rationale: str
-    answer: str
+    answer: Literal["Yes", "No", "Yes! You found the target!"]
     game_over: bool
 
 @dataclass
