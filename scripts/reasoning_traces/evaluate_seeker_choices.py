@@ -9,10 +9,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from os import getenv
+from typing import Dict, Optional
+import yaml
 
 # Add project root to path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
@@ -23,6 +24,29 @@ from src.utils import ClaryLogger
 load_dotenv()
 
 logger = ClaryLogger.get_logger(__name__)
+
+_SERVERS_YAML = project_root / "configs" / "servers.yaml"
+
+
+def _load_servers() -> Dict[str, str]:
+    if not _SERVERS_YAML.exists():
+        return {}
+    with _SERVERS_YAML.open() as f:
+        data = yaml.safe_load(f)
+    return (data or {}).get("servers", {})
+
+
+def _resolve_base_url(model: str, cli_url: Optional[str]) -> str:
+    if cli_url:
+        return cli_url
+    servers = _load_servers()
+    url = servers.get(model)
+    if not url:
+        raise SystemExit(
+            f"Model '{model}' not found in {_SERVERS_YAML}. "
+            "Pass --base-url explicitly or add the model to configs/servers.yaml."
+        )
+    return url.rstrip("/")
 
 
 def main() -> int:
@@ -36,10 +60,10 @@ def main() -> int:
         help="Directory containing seeker_traces.json, turns.jsonl, metadata.json"
     )
     parser.add_argument(
-        "--graph-csv",
+        "--dataset-csv",
         type=Path,
-        default=Path("data/top_40_pop_cities.csv"),
-        help="Path to CSV file for loading knowledge graph (default: data/top_40_pop_cities.csv)"
+        default=None,
+        help="Path to domain CSV. Auto-detected from target id if omitted."
     )
     parser.add_argument(
         "--oracle-model",
@@ -56,14 +80,14 @@ def main() -> int:
     parser.add_argument(
         "--base-url",
         type=str,
-        default="http://localhost:8000/v1",
-        help="Base URL for LLM API (e.g., http://localhost:8000/v1)"
+        default=None,
+        help="Base URL for LLM API. If omitted, resolved from configs/servers.yaml using the model name."
     )
     parser.add_argument(
         "--api-key",
         type=str,
-        default=None,
-        help="API key for LLM (defaults to OPENAI_API_KEY env var)"
+        default="NINGUEM-TA-PURO-2K26",
+        help="API key for LLM (default: NINGUEM-TA-PURO-2K26)"
     )
     parser.add_argument(
         "--output",
@@ -82,10 +106,6 @@ def main() -> int:
         logger.error("Conversation directory not found: %s", args.conversation_dir)
         return 1
     
-    if not args.graph_csv.exists():
-        logger.error("Graph CSV file not found: %s", args.graph_csv)
-        return 1
-    
     # Load metadata to get model configs
     metadata_path = args.conversation_dir / "metadata.json"
     if not metadata_path.exists():
@@ -96,36 +116,37 @@ def main() -> int:
         metadata = json.load(f)
     
     models_config = metadata.get("config", {}).get("models", {})
-    oracle_model = args.oracle_model or models_config.get("oracle", "gpt-4o-mini")
-    pruner_model = args.pruner_model or models_config.get("pruner", "gpt-4o-mini")
+    oracle_model = args.oracle_model or models_config.get("oracle", "Qwen3-8B")
+    pruner_model = args.pruner_model or models_config.get("pruner", "Qwen3-8B")
     
     logger.info("🔍 Evaluating Seeker Question Choices")
     logger.info("=" * 60)
     logger.info("📁 Conversation: %s", args.conversation_dir)
-    logger.info("📊 Graph CSV: %s", args.graph_csv)
+    logger.info("📊 Dataset CSV: %s", args.dataset_csv or "(auto-detected)")
     logger.info("🤖 Oracle Model: %s", oracle_model)
     logger.info("🤖 Pruner Model: %s", pruner_model)
     
-    # Create LLM configs
+    # Create LLM configs — resolve base_url from servers.yaml if not provided
+    oracle_base_url = _resolve_base_url(oracle_model, args.base_url)
+    pruner_base_url = _resolve_base_url(pruner_model, args.base_url)
     oracle_config = LLMConfig(
         model=oracle_model,
         api_key=args.api_key,
-        base_url=args.base_url
+        base_url=oracle_base_url
     )
-    
     pruner_config = LLMConfig(
         model=pruner_model,
         api_key=args.api_key,
-        base_url=args.base_url
+        base_url=pruner_base_url
     )
     
     # Evaluate choices
     try:
         results = evaluate_seeker_choices(
             conversation_dir=args.conversation_dir,
-            graph_csv_path=args.graph_csv,
             oracle_config=oracle_config,
-            pruner_config=pruner_config
+            pruner_config=pruner_config,
+            dataset_csv_path=args.dataset_csv,
         )
     except Exception as e:
         logger.error("Error evaluating choices: %s", e, exc_info=True)

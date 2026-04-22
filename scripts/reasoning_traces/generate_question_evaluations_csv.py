@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 
 # Garantir imports do projeto
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.analysis.loader import load_experiment_results
 

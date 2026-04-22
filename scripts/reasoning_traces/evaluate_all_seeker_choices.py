@@ -13,12 +13,12 @@ import math
 import statistics
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from os import getenv
 from typing import List, Set, Dict, Any, Optional
 from dotenv import load_dotenv
+import yaml
 
 # Add project root to path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.analysis.question_evaluator import evaluate_seeker_choices
@@ -28,6 +28,30 @@ from src.utils import ClaryLogger
 load_dotenv()
 
 logger = ClaryLogger.get_logger(__name__)
+
+_SERVERS_YAML = project_root / "configs" / "servers.yaml"
+
+
+def _load_servers() -> Dict[str, str]:
+    if not _SERVERS_YAML.exists():
+        return {}
+    with _SERVERS_YAML.open() as f:
+        data = yaml.safe_load(f)
+    return (data or {}).get("servers", {})
+
+
+def _resolve_base_url(model: str, cli_url: Optional[str]) -> str:
+    """Return CLI url if given, else look up model in servers.yaml."""
+    if cli_url:
+        return cli_url
+    servers = _load_servers()
+    url = servers.get(model)
+    if not url:
+        raise SystemExit(
+            f"Model '{model}' not found in {_SERVERS_YAML}. "
+            "Pass --base-url explicitly or add the model to configs/servers.yaml."
+        )
+    return url.rstrip("/")
 
 
 def find_conversation_dirs_from_runs_csv(
@@ -118,23 +142,12 @@ def load_evaluation_data(conversation_dir: Path) -> Optional[Dict[str, Any]]:
 
 def process_single_conversation(
     conversation_dir: Path,
-    graph_csv_path: Path,
     oracle_config: LLMConfig,
     pruner_config: LLMConfig,
-    force: bool = False
+    force: bool = False,
+    dataset_csv_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Process a single conversation directory.
-    
-    Args:
-        conversation_dir: Path to conversation directory.
-        graph_csv_path: Path to CSV file for loading knowledge graph.
-        oracle_config: LLM configuration for Oracle simulation.
-        pruner_config: LLM configuration for Pruner simulation.
-        force: Whether to overwrite existing question_evaluation.json.
-        
-    Returns:
-        Dictionary with processing result, including evaluation data if available.
-    """
+    """Process a single conversation directory."""
     output_path = conversation_dir / "question_evaluation.json"
     
     # Check if file exists and is valid (not empty/incomplete)
@@ -150,7 +163,8 @@ def process_single_conversation(
             }
     
     # Check if required files exist
-    required_files = ["seeker_traces.json", "turns.jsonl", "metadata.json"]
+    # seeker_traces.json is optional — evaluator falls back to unified seeker_traces.jsonl
+    required_files = ["turns.jsonl", "metadata.json"]
     missing_files = [f for f in required_files if not (conversation_dir / f).exists()]
     if missing_files:
         return {
@@ -163,9 +177,9 @@ def process_single_conversation(
     try:
         results = evaluate_seeker_choices(
             conversation_dir,
-            graph_csv_path,
             oracle_config,
-            pruner_config
+            pruner_config,
+            dataset_csv_path=dataset_csv_path,
         )
         
         # Save results
@@ -207,12 +221,17 @@ def calculate_aggregate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]
         if r.get("status") in ("success", "skipped") and r.get("evaluation_data"):
             evaluations.append(r["evaluation_data"])
     
+    success_count = sum(1 for r in results if r["status"] == "success")
+    skipped_count = sum(1 for r in results if r["status"] == "skipped")
+    error_count = sum(1 for r in results if r["status"] == "error")
+
     if not evaluations:
         return {
-            "total_conversations": 0,
-            "total_evaluated": 0,
-            "total_skipped": 0,
-            "total_errors": 0
+            "total_conversations": len(results),
+            "total_evaluated": success_count + skipped_count,
+            "total_success": success_count,
+            "total_skipped": skipped_count,
+            "total_errors": error_count,
         }
     
     # Aggregate statistics
@@ -326,11 +345,6 @@ def calculate_aggregate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]
             "total_connection_errors": data["total_connection_errors"]
         }
     
-    # Count statuses
-    success_count = sum(1 for r in results if r["status"] == "success")
-    skipped_count = sum(1 for r in results if r["status"] == "skipped")
-    error_count = sum(1 for r in results if r["status"] == "error")
-    
     # Calculate global stds and SEs using hierarchical approach (by target)
     num_targets = len(by_target_summary)
     
@@ -382,15 +396,109 @@ def calculate_aggregate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]
     }
 
 
+def find_cot_runs_csvs(base_dir: Path) -> List[Path]:
+    """Return all CoT runs.csv files under base_dir (same logic as synthesize_traces.py)."""
+    return sorted(
+        p for p in base_dir.rglob("runs.csv")
+        if (p.parent.name.endswith("_cot") or "_cot_" in p.parent.name)
+        and "no_cot" not in p.parent.name
+    )
+
+
+def run_for_csv(
+    runs_csv_path: Path,
+    outputs_base_dir: Path,
+    oracle_config: LLMConfig,
+    pruner_config: LLMConfig,
+    max_workers: int,
+    force: bool,
+    dry_run: bool,
+    dataset_csv: Optional[Path],
+) -> int:
+    """Process a single runs.csv. Returns 0 on success, 1 if any errors."""
+    try:
+        conversation_dirs = find_conversation_dirs_from_runs_csv(runs_csv_path, outputs_base_dir)
+    except FileNotFoundError as e:
+        logger.error("Error: %s", e)
+        return 1
+
+    if not conversation_dirs:
+        logger.warning("No conversation directories found in %s — skipping", runs_csv_path)
+        return 0
+
+    logger.info("📊 %s — %d conversations", runs_csv_path.parent.name, len(conversation_dirs))
+
+    if dry_run:
+        for i, conv_dir in enumerate(conversation_dirs, 1):
+            output_path = conv_dir / "question_evaluation.json"
+            status = "Process"
+            if output_path.exists():
+                try:
+                    data = json.load(output_path.open())
+                    if data.get("turns_evaluation") and data.get("summary"):
+                        status = "Skip (exists and valid)"
+                    else:
+                        status = "Process (exists but invalid)"
+                except Exception:
+                    status = "Process (exists but corrupted)"
+            logger.info("[%d/%d] %s: %s", i, len(conversation_dirs), status, conv_dir)
+        return 0
+
+    results = []
+    if max_workers > 1:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    process_single_conversation,
+                    conv_dir, oracle_config, pruner_config, force, dataset_csv,
+                ): conv_dir
+                for conv_dir in conversation_dirs
+            }
+            for i, future in enumerate(as_completed(futures), 1):
+                result = future.result()
+                results.append(result)
+                emoji = "✅" if result["status"] == "success" else "⏭️" if result["status"] == "skipped" else "❌"
+                logger.info("[%d/%d] %s %s: %s", i, len(conversation_dirs), emoji,
+                            result["status"].capitalize(), result["conversation_dir"])
+    else:
+        try:
+            from tqdm import tqdm as _tqdm
+        except ImportError:
+            def _tqdm(x, **kw): return x
+        for conv_dir in _tqdm(conversation_dirs, desc="Evaluating", unit="conv"):
+            result = process_single_conversation(conv_dir, oracle_config, pruner_config, force, dataset_csv)
+            results.append(result)
+
+    aggregate_summary = calculate_aggregate_summary(results)
+    logger.info("  ✅ %d ok | ⏭️  %d skip | ❌ %d err",
+                aggregate_summary["total_success"],
+                aggregate_summary["total_skipped"],
+                aggregate_summary["total_errors"])
+
+    summary_path = runs_csv_path.parent / "question_evaluations_summary.json"
+    with summary_path.open("w", encoding="utf-8") as f:
+        json.dump(aggregate_summary, f, indent=2, ensure_ascii=False)
+    logger.info("💾 Summary → %s", summary_path)
+
+    return 1 if aggregate_summary["total_errors"] > 0 else 0
+
+
 def main():
     """Main entry point for batch evaluation."""
     parser = argparse.ArgumentParser(
         description="Evaluate Seeker's question choices for all conversations in a runs.csv"
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "runs_csv_path",
         type=Path,
-        help="Path to the runs.csv file"
+        nargs="?",
+        help="Path to a single runs.csv file"
+    )
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Process all CoT runs.csv under --outputs-base-dir"
     )
     parser.add_argument(
         "--outputs-base-dir",
@@ -399,34 +507,34 @@ def main():
         help="Base directory where conversation paths in runs.csv are relative to (default: ./outputs)"
     )
     parser.add_argument(
-        "--graph-csv",
+        "--dataset-csv",
         type=Path,
-        default=Path("data/top_40_pop_cities.csv"),
-        help="Path to CSV file for loading knowledge graph (default: data/top_40_pop_cities.csv)"
+        default=None,
+        help="Path to domain CSV. Auto-detected from target id if omitted."
     )
     parser.add_argument(
         "--oracle-model",
         type=str,
         default="Qwen3-8B",
-        help="LLM model to use for Oracle simulation (default: Qwen3-8B)"
+        help="LLM model for Oracle simulation — resolved via configs/servers.yaml (default: Qwen3-8B)"
     )
     parser.add_argument(
         "--pruner-model",
         type=str,
         default="Qwen3-8B",
-        help="LLM model to use for Pruner simulation (default: Qwen3-8B)"
+        help="LLM model for Pruner simulation — resolved via configs/servers.yaml (default: Qwen3-8B)"
     )
     parser.add_argument(
         "--base-url",
         type=str,
-        default="http://localhost:8000/v1",
-        help="Base URL for LLM API (default: http://localhost:8000/v1)"
+        default=None,
+        help="Base URL for LLM API. If omitted, resolved from configs/servers.yaml using the model name."
     )
     parser.add_argument(
         "--api-key",
         type=str,
-        default=None,
-        help="API key for LLM (defaults to OPENAI_API_KEY env var if not provided)"
+        default="NINGUEM-TA-PURO-2K26",
+        help="API key for LLM (default: NINGUEM-TA-PURO-2K26)"
     )
     parser.add_argument(
         "--temperature",
@@ -453,162 +561,42 @@ def main():
     
     args = parser.parse_args()
     
-    # Configure logging
     ClaryLogger.configure()
-    
-    logger.info("🔍 Evaluating Seeker Question Choices from runs.csv")
-    logger.info("=" * 60)
-    logger.info("📁 runs.csv: %s", args.runs_csv_path)
-    logger.info("📁 Outputs base: %s", args.outputs_base_dir)
-    logger.info("📊 Graph CSV: %s", args.graph_csv)
-    logger.info("🤖 Oracle Model: %s", args.oracle_model)
-    logger.info("🤖 Pruner Model: %s", args.pruner_model)
-    if args.base_url:
-        logger.info("🌐 Base URL: %s", args.base_url)
-    if args.temperature is not None:
-        logger.info("🌡️  Temperature: %s", args.temperature)
-    logger.info("⚙️  Max workers: %s", args.max_workers)
-    logger.info("🔄 Force: %s", args.force)
-    
-    # Find all conversation directories
-    try:
-        conversation_dirs = find_conversation_dirs_from_runs_csv(
-            args.runs_csv_path, 
-            args.outputs_base_dir
-        )
-    except FileNotFoundError as e:
-        logger.error("Error: %s", e)
-        return 1
-    
-    if not conversation_dirs:
-        logger.error("No conversation directories found from %s", args.runs_csv_path)
-        return 1
-    
-    logger.info("📊 Found %d unique conversation directories", len(conversation_dirs))
-    
-    if args.dry_run:
-        logger.info("\n--- Dry Run: Conversations to be processed ---")
-        for i, conv_dir in enumerate(conversation_dirs, 1):
-            output_path = conv_dir / "question_evaluation.json"
-            status = "Process"
-            if output_path.exists():
-                try:
-                    with output_path.open("r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        if (data.get("turns_evaluation") and 
-                            len(data.get("turns_evaluation", [])) > 0 and
-                            data.get("summary")):
-                            status = "Skip (exists and valid)"
-                        else:
-                            status = "Process (exists but invalid)"
-                except (json.JSONDecodeError, Exception):
-                    status = "Process (exists but corrupted)"
-            logger.info("[%d/%d] %s: %s", i, len(conversation_dirs), status, conv_dir)
-        logger.info("\nDry run complete. No conversations were actually processed.")
-        return 0
-    
-    logger.info("\n🔄 Processing conversations...")
-    
-    # Create LLM configs for simulation
+
+    logger.info("🔍 Evaluate Seeker Question Choices")
+    logger.info("🤖 Oracle: %s | Pruner: %s", args.oracle_model, args.pruner_model)
+    logger.info("⚙️  workers=%d  force=%s", args.max_workers, args.force)
+
+    oracle_base_url = _resolve_base_url(args.oracle_model, args.base_url)
+    pruner_base_url = _resolve_base_url(args.pruner_model, args.base_url)
     oracle_config = LLMConfig(
-        model=args.oracle_model,
-        api_key=args.api_key or getenv("OPENAI_API_KEY"),
-        base_url=args.base_url,
-        temperature=args.temperature
+        model=args.oracle_model, api_key=args.api_key,
+        base_url=oracle_base_url, temperature=args.temperature,
     )
     pruner_config = LLMConfig(
-        model=args.pruner_model,
-        api_key=args.api_key or getenv("OPENAI_API_KEY"),
-        base_url=args.base_url,
-        temperature=args.temperature
+        model=args.pruner_model, api_key=args.api_key,
+        base_url=pruner_base_url, temperature=args.temperature,
     )
-    
-    results = []
-    if args.max_workers > 1:
-        with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-            futures = {
-                executor.submit(
-                    process_single_conversation,
-                    conv_dir,
-                    args.graph_csv,
-                    oracle_config,
-                    pruner_config,
-                    args.force
-                ): conv_dir 
-                for conv_dir in conversation_dirs
-            }
-            for i, future in enumerate(as_completed(futures), 1):
-                result = future.result()
-                results.append(result)
-                status_emoji = "✅" if result["status"] == "success" else "⏭️" if result["status"] == "skipped" else "❌"
-                logger.info(
-                    "[%d/%d] %s %s: %s", 
-                    i, 
-                    len(conversation_dirs), 
-                    status_emoji,
-                    result["status"].capitalize(), 
-                    result["conversation_dir"]
-                )
+
+    if args.all:
+        runs_csvs = find_cot_runs_csvs(args.outputs_base_dir)
+        logger.info("🔎 %d CoT runs.csv found under %s", len(runs_csvs), args.outputs_base_dir)
+        any_error = False
+        for i, runs_csv in enumerate(runs_csvs, 1):
+            logger.info("\n[%d/%d] %s", i, len(runs_csvs), runs_csv.parent.name)
+            rc = run_for_csv(runs_csv, args.outputs_base_dir, oracle_config, pruner_config,
+                             args.max_workers, args.force, args.dry_run, args.dataset_csv)
+            if rc != 0:
+                any_error = True
+        return 1 if any_error else 0
     else:
-        try:
-            from tqdm import tqdm
-        except ImportError:
-            def tqdm(iterable, *args, **kwargs):
-                return iterable
-        
-        for i, conv_dir in enumerate(tqdm(conversation_dirs, desc="Evaluating conversations", unit="conv"), 1):
-            result = process_single_conversation(
-                conv_dir,
-                args.graph_csv,
-                oracle_config,
-                pruner_config,
-                args.force
-            )
-            results.append(result)
-            status_emoji = "✅" if result["status"] == "success" else "⏭️" if result["status"] == "skipped" else "❌"
-            logger.info(
-                "[%d/%d] %s %s: %s", 
-                i, 
-                len(conversation_dirs), 
-                status_emoji,
-                result["status"].capitalize(), 
-                result["conversation_dir"]
-            )
-    
-    # Calculate aggregate summary
-    aggregate_summary = calculate_aggregate_summary(results)
-    
-    # Log summary
-    logger.info("\n--- Evaluation Summary ---")
-    logger.info("✅ Sucessos: %d", aggregate_summary["total_success"])
-    logger.info("⏭️  Pulados (já existentes e válidos): %d", aggregate_summary["total_skipped"])
-    logger.info("❌ Erros: %d", aggregate_summary["total_errors"])
-    logger.info("Total processado/tentado: %d", aggregate_summary["total_conversations"])
-    
-    if aggregate_summary["total_evaluated"] > 0:
-        stats = aggregate_summary["aggregate_statistics"]
-        logger.info("\n--- Aggregate Statistics (from successful evaluations) ---")
-        logger.info("Total turns evaluated: %d", stats["total_turns_evaluated"])
-        logger.info("Total optimal choices: %d", stats["total_optimal_choices"])
-        logger.info("Average optimal choice rate: %.2f%%", stats["avg_optimal_choice_rate"] * 100)
-        logger.info("Average chosen info gain: %.4f", stats["avg_chosen_info_gain"])
-        logger.info("Average optimal info gain: %.4f", stats["avg_optimal_info_gain"])
-        logger.info("Average questions considered per turn: %.2f", stats["avg_questions_considered_per_turn"])
-        logger.info("Total connection errors: %d", stats["total_connection_errors"])
-    
-    # Save aggregate summary to JSON file
-    summary_output_path = args.runs_csv_path.parent / "question_evaluations_summary.json"
-    try:
-        with summary_output_path.open("w", encoding="utf-8") as f:
-            json.dump(aggregate_summary, f, indent=2, ensure_ascii=False)
-        logger.info("\n💾 Aggregate summary saved to: %s", summary_output_path)
-    except Exception as e:
-        logger.error("Failed to save aggregate summary: %s", e, exc_info=True)
-    
-    if aggregate_summary["total_errors"] > 0:
-        logger.error("Algumas conversas falharam na avaliação. Verifique os logs acima para detalhes.")
-        return 1
-    return 0
+        if args.runs_csv_path is None:
+            logger.error("Provide a runs.csv path or use --all")
+            return 1
+        return run_for_csv(
+            args.runs_csv_path, args.outputs_base_dir, oracle_config, pruner_config,
+            args.max_workers, args.force, args.dry_run, args.dataset_csv,
+        )
 
 
 if __name__ == "__main__":
