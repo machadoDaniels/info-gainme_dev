@@ -219,17 +219,29 @@ scripts/
   analyze_results.py              ← runs.csv → summary.json + variance.json (wraps analysis/writer)
   generate_unified_csv.py         ← merges all experiments into outputs/unified_experiments.csv
   generate_model_summary_csv.py   ← per-model aggregation CSV
-  analyze_reasoning_traces.py     ← reads seeker_traces.json → reasoning_traces_analysis.json
-  multi_synthesize_reasoning_traces.py  ← batch synthesize traces across experiments
-  evaluate_all_seeker_choices.py  ← batch question-choice evaluation from runs.csv
-  evaluate_seeker_choices.py      ← single-conversation question-choice evaluation
   aggregate_metrics_by_city.py    ← city-level metric aggregation
   aggregate_ig_over_time.py       ← IG-over-turns aggregation
-  generate_question_evaluations_csv.py  ← flatten question_evaluation.json → CSV
   plot_aggregated_ig.py           ← plot IG-over-turns curves
+  compute_optimal_baseline.py     ← optimal-play upper-bound baseline
+  extract_top_cities_by_population.py  ← data prep helper
   prepare_diseases_csv.py         ← prepare diseases CSV for dataset creation
+  delete_evaluations_with_connection_errors.py
+  recalculate_question_evaluation_se.py
   download_from_hf.py / upload_to_hf.py  ← HuggingFace dataset sync (see also dgx/ shell wrappers)
+  reasoning_traces/               ← CoT trace synthesis + question-choice evaluation
+    synthesize_traces.py              ← batch synthesize traces across experiments
+    analyze_traces.py                 ← seeker_traces.json → reasoning_traces_analysis.json
+    evaluate_all_seeker_choices.py    ← batch question-choice evaluation from runs.csv
+    evaluate_seeker_choices.py        ← single-conversation question-choice evaluation
+    generate_question_evaluations_csv.py  ← flatten question_evaluation.json → CSV
+    summary_table.py                  ← decision-quality summary table (Table 2)
+  question_classification/        ← post-hoc classification of seeker questions
+    classify_questions.py
+    analyze_question_classifications.py
+    flatten_question_classifications.py
 ```
+
+Note: the `dgx/` shell wrappers (e.g. `run_synthesize_traces.sh`, `run_analyze_traces.sh`) still work — they were updated to point at the new `scripts/reasoning_traces/` locations.
 
 **Key flow:** `benchmark_runner.py` / `human_benchmark_runner.py` → `BenchmarkRunner.run()` → per game: `Orchestrator.from_target()` → loop: Seeker asks → Oracle answers → Pruner prunes → entropy computed → `TurnState` appended → results written to `runs.csv`.
 
