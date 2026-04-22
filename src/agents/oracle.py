@@ -64,22 +64,9 @@ class OracleAgent:
         """Add Seeker's question to conversation history."""
         self._llm_adapter.append_history("user", f"[Seeker] - {question.text}")
 
-    # Structured output spec for the Oracle: pinned to the Pydantic schema of
-    # OracleResponse (answer is Literal["Yes", "No"]). Backends that honor the
-    # OpenAI json_schema response_format (vLLM ≥0.6, OpenAI, Gemini) will reject
-    # outputs that don't match.
-    _RESPONSE_FORMAT = {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "OracleResponse",
-            "schema": OracleResponse.model_json_schema(),
-            "strict": True,
-        },
-    }
-
     def answer_seeker(self) -> Answer:
         """Generate an answer to the Seeker's question."""
-        response = self._llm_adapter.generate(response_format=self._RESPONSE_FORMAT)
+        response = self._llm_adapter.generate()
         response = llm_final_content(response)
 
         oracle_response = OracleResponse.model_validate_json(response)
