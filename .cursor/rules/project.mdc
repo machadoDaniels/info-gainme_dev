@@ -30,7 +30,10 @@ src/
     writer.py         # save_summary(), save_city_variance()
 
 benchmark_runner.py   # Script principal multi-game
-demo_single_game.py   # Demo single game
+demos/
+  demo_single_game.py    # Demo single game (geo)
+  demo_objects_game.py   # Demo single game (objects)
+  demo_diseases_game.py  # Demo single game (diseases)
 scripts/
   analyze_results.py  # Análise de resultados e geração de JSONs
 data/                 # entradas (CSV files)
@@ -50,7 +53,7 @@ logs/                 # logs de execução
 - Enums mantêm UPPER_CASE (ex: `FULLY_OBSERVED`).
 
 ## Fluxo de execução
-1. **Single Game**: `demo_single_game.py` → `Orchestrator.from_target()` → `orchestrator.run()`
+1. **Single Game**: `demos/demo_single_game.py` → `Orchestrator.from_target()` → `orchestrator.run()`
 2. **Multi-Game**: `benchmark_runner.py` → `BenchmarkRunner` → múltiplos `Orchestrator` → CSV + conversas
 3. **Analysis**: `scripts/analyze_results.py` → `load_experiment_results()` → `summary.json` + `variance.json`
 4. **Data Flow**: `load_geo_graph()` → `KnowledgeGraph` → `Orchestrator` → results
