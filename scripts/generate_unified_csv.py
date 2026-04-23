@@ -8,7 +8,7 @@ Usage:
     python scripts/generate_unified_csv.py [base_outputs_dir] [output_csv_path]
 
 Colunas geradas:
-    Experimento, Seeker Model, Oracle Model, Pruner Model, Observabilidade, Total Runs, Win Rate,
+    Experimento, Dataset, Seeker Model, Oracle Model, Pruner Model, Observabilidade, Total Runs, Win Rate,
     Mean Turns, Mean Info Gain/Turn, Mean Info Gain, Mean Initial Entropy,
     Mean Seeker Tokens, Mean Seeker Reasoning Tokens, Mean Seeker Final Tokens,
     SE Win Rate, SE Mean Turns, SE Mean Info Gain/Turn, SE Mean Info Gain, SE Mean Initial Entropy,
@@ -40,8 +40,21 @@ def _compose_experiment_id(row: dict) -> str:
     return f"s_{s}__o_{o}__p_{p}__{obs}__{exp}"
 
 
+def _infer_dataset(experiment_id: str | None) -> str | None:
+    """Derives the dataset (geo/objects/diseases) from the last __-segment of the experiment id."""
+    if not experiment_id:
+        return None
+    # id format: s_<seeker>__o_<oracle>__p_<pruner>__<obs>__<experiment_name>
+    exp = experiment_id.split("__")[-1].lower()
+    for ds in ("geo", "objects", "diseases"):
+        if exp.startswith(ds + "_") or f"_{ds}_" in exp:
+            return ds
+    return None
+
+
 HEADERS = [
     "Experimento",
+    "Dataset",
     "Seeker Model",
     "Oracle Model",
     "Pruner Model",
@@ -141,6 +154,7 @@ def _iter_experiments(base_outputs_dir: Path) -> list[dict]:
         row = _extract_from_summary(summary_path)
         if row:
             row["id"] = _compose_experiment_id(row)
+            row["Dataset"] = _infer_dataset(row["id"])
             rows.append(row)
 
     # Para pastas sem summary.json, tentar via runs.csv
@@ -155,6 +169,7 @@ def _iter_experiments(base_outputs_dir: Path) -> list[dict]:
         row["id"] = _compose_experiment_id(row)
         if row["id"] in seen_ids:
             continue
+        row["Dataset"] = _infer_dataset(row["id"])
         rows.append(row)
         seen_ids.add(row["id"])
 
