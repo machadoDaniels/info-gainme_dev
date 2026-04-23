@@ -64,10 +64,8 @@ class SeekerAgent:
             ),
         )
 
-        # Kickoff user turn (PO only). FO mode relies on add_initial_candidates
-        # to inject the candidate list as the first user turn instead.
-        # Without this, PO-mode thinking models skip reasoning on turn 1
-        # (chat templates only open <think> after a user turn).
+        # Thinking-model chat templates only open <think> after a user turn;
+        # FO supplies one via add_initial_candidates, PO needs this kickoff.
         if self._observability_mode == ObservabilityMode.PARTIALLY_OBSERVABLE:
             self._llm_adapter.append_history(
                 "user",

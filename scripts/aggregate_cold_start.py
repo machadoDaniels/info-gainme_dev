@@ -21,6 +21,8 @@ from pathlib import Path
 
 
 CONDITIONS = ("T1_system_only", "T2_with_kickoff", "T3_turn2_baseline")
+VALID_LABELS = ("VALID", "LONG_QUESTION")
+BROKEN_LABELS = ("FORMAT_BROKEN", "EMPTY")
 
 
 def load_reps(cond_dir: Path) -> list[dict]:
@@ -40,10 +42,10 @@ def summarize(reps: list[dict]) -> dict:
     comp = [u.get("completion_tokens") for u in usages if u.get("completion_tokens")]
     return {
         "n": len(reps),
-        "valid": labels.get("VALID", 0) + labels.get("LONG_QUESTION", 0),
+        "valid": sum(labels.get(l, 0) for l in VALID_LABELS),
         "fallback": labels.get("FALLBACK", 0),
         "refusal": labels.get("REFUSAL", 0),
-        "broken": labels.get("FORMAT_BROKEN", 0) + labels.get("EMPTY", 0),
+        "broken": sum(labels.get(l, 0) for l in BROKEN_LABELS),
         "error": labels.get("ERROR", 0),
         "unique": len(set(finals)),
         "think_rate": sum(r.get("think_present", False) for r in reps) / len(reps),
