@@ -1,44 +1,50 @@
 #!/usr/bin/env python3
-"""Demo for geographic dataset.
+"""Demo for diseases dataset.
 
-Loads cities from CSV and runs a single game.
+Loads diseases from CSV (diseases_test.csv or diseases_full.csv).
+Preprocess first: python scripts/prepare_diseases_csv.py
 """
 
 import logging
+import os
+import sys
 from os import getenv
-from dotenv import load_dotenv
-from src.logging_config import setup_logging
-from src.orchestrator import Orchestrator
-from src.agents.llm_adapter import LLMConfig
-from src.data_types import ObservabilityMode
-from src.domain.geo.loader import load_geo_candidates
-from src.benchmark_config import BenchmarkConfig
 from pathlib import Path
 from random import choice
-import os
+
+from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.logging_config import setup_logging
+from src.orchestrator import Orchestrator
+from src.agents.llm_config import LLMConfig
+from src.data_types import ObservabilityMode
+from src.domain.diseases import load_flat_disease_candidates
+from src.benchmark_config import BenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = getenv("OPENAI_API_KEY")
-OBSERVABILITY_MODE = ObservabilityMode.PARTIALLY_OBSERVABLE
-MAX_TURNS = 15
-CSV_PATH = Path("data/top_10_pop_cities.csv")
+OBSERVABILITY_MODE = ObservabilityMode.FULLY_OBSERVABLE
+MAX_TURNS = 20
 OUTPUT_PATH = Path("outputs")
+DISEASES_CSV = Path("data/diseases/diseases_test.csv")
 MODEL = "gpt-4o-mini"
 
 os.makedirs(OUTPUT_PATH, exist_ok=True)
 
 
 def main() -> None:
-    """Run the benchmark demonstration."""
+    """Run the benchmark with diseases dataset."""
     load_dotenv()
     setup_logging()
 
-    logger.info("Clary Quest - Geographic Benchmark")
+    logger.info("Clary Quest - Diseases Benchmark")
 
-    pool, domain_config = load_geo_candidates(csv_path=CSV_PATH)
+    pool, domain_config = load_flat_disease_candidates(csv_path=DISEASES_CSV)
     candidates = pool.get_active()
-    logger.info("Candidate Pool: %d cities", len(candidates))
+    logger.info("Candidate Pool: %d diseases", len(candidates))
 
     llm_config = LLMConfig(model=MODEL, api_key=OPENAI_API_KEY)
     bm_config = BenchmarkConfig(
@@ -47,12 +53,14 @@ def main() -> None:
         pruner_config=llm_config,
         observability_mode=OBSERVABILITY_MODE,
         max_turns=MAX_TURNS,
+        domain_config=domain_config,
     )
 
     target = choice(candidates)
+    symptoms = target.attrs.get("symptoms", [])
     logger.info(
-        "Target: %s (%s) | observability=%s | max_turns=%d | model=%s",
-        target.label, target.id,
+        "Target: %s (%s) | symptoms=%d | observability=%s | max_turns=%d | model=%s",
+        target.label, target.id, len(symptoms),
         bm_config.observability_mode.name, bm_config.max_turns, bm_config.seeker_config.model,
     )
 
@@ -64,6 +72,7 @@ def main() -> None:
         pruner_config=bm_config.pruner_config,
         observability_mode=bm_config.observability_mode,
         max_turns=bm_config.max_turns,
+        domain_config=domain_config,
     )
 
     logger.info("Starting benchmark run...")

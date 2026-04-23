@@ -37,9 +37,9 @@ There is no automated test suite. Validate changes manually using the demo scrip
 
 **Run a single game** to test locally:
 ```bash
-python3 demo_single_game.py                    # generic test
-python3 demo_objects_game.py                   # objects domain
-python3 demo_diseases_game.py                  # diseases domain
+python3 demos/demo_single_game.py               # generic test
+python3 demos/demo_objects_game.py              # objects domain
+python3 demos/demo_diseases_game.py             # diseases domain
 ```
 
 These demos use a small subset of candidates and don't require large-scale infrastructure. Useful for testing agent logic or configs.

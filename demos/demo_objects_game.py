@@ -5,9 +5,15 @@ Loads objects from CSV (objects_test.csv or objects_full.csv).
 """
 
 import logging
+import os
+import sys
 from os import getenv
-from dotenv import load_dotenv
+from pathlib import Path
 from random import choice
+
+from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.logging_config import setup_logging
 from src.orchestrator import Orchestrator
@@ -15,8 +21,6 @@ from src.agents.llm_config import LLMConfig
 from src.data_types import ObservabilityMode
 from src.domain.objects import load_flat_object_candidates
 from src.benchmark_config import BenchmarkConfig
-from pathlib import Path
-import os
 
 logger = logging.getLogger(__name__)
 
