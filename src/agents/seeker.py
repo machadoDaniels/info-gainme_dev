@@ -71,7 +71,7 @@ class SeekerAgent:
         if self._observability_mode == ObservabilityMode.PARTIALLY_OBSERVABLE:
             self._llm_adapter.append_history(
                 "user",
-                f"[Turn 1/{self._max_turns}] Start the game. Ask your first question.",
+                "Start the game. Ask your first question.",
             )
 
     @property
