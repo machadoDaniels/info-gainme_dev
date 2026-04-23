@@ -369,7 +369,6 @@ class Orchestrator:
         final_active = len(self._pool.get_active())
 
         metadata = {
-            "game_id": None,
             "timestamp": datetime.now().isoformat(),
             "git": get_git_info(),
             "target": {
