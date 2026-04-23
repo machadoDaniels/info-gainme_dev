@@ -27,10 +27,10 @@ echo "Modelo: ${MODEL}"
 echo "Workers: ${WORKERS} conversas × ${TURN_WORKERS} turns = $(( WORKERS * TURN_WORKERS )) LLM calls max"
 if [ -n "${RUNS_PATH}" ]; then
     echo "CSV: ${RUNS_PATH}"
-    SYNTHESIS_CMD="python3 scripts/multi_synthesize_reasoning_traces.py --runs '${RUNS_PATH}' ${MODEL_ARGS}"
+    SYNTHESIS_CMD="python3 scripts/reasoning_traces/synthesize_traces.py --runs '${RUNS_PATH}' ${MODEL_ARGS}"
 else
     echo "Modo: --all (todos os runs.csv sob outputs/)"
-    SYNTHESIS_CMD="python3 scripts/multi_synthesize_reasoning_traces.py --all ${MODEL_ARGS}"
+    SYNTHESIS_CMD="python3 scripts/reasoning_traces/synthesize_traces.py --all ${MODEL_ARGS}"
 fi
 echo "=========================================="
 

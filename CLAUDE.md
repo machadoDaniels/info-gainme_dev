@@ -168,8 +168,6 @@ For each CoT game, extracts `<think>` blocks from `seeker.json` and synthesizes 
 
 Parallelism is two-level: `WORKERS` (default 8) = conversations in parallel per experiment; `TURN_WORKERS` (default 4) = LLM calls parallelized within a conversation. Max concurrent LLM calls ≈ `workers × turn_workers`. Override via `--turn-workers` flag or `TURN_WORKERS` env var.
 
-`dgx/run_all_synthesize_traces.sh` is a shortcut that synthesizes all traces at once without `sg sd22` (personal environment only).
-
 **Step 3: Analyze reasoning traces**
 ```bash
 bash dgx/run_analyze_traces.sh                  # default outputs/
@@ -257,9 +255,7 @@ scripts/
   recalculate_question_evaluation_se.py
   download_from_hf.py / upload_to_hf.py  ← HuggingFace dataset sync (see also dgx/ shell wrappers)
   reasoning_traces/               ← CoT trace synthesis + question-choice evaluation
-    synthesize_traces.py              ← batch synthesize traces across experiments
-    synthesize_from_runs_csv.py       ← synthesize traces for a specific runs.csv
-    synthesize_reasoning_traces.py    ← (legacy) single-seeker.json synthesis
+    synthesize_traces.py              ← batch synthesize traces (--all / --runs / --seeker-file)
     analyze_traces.py                 ← seeker_traces.json → reasoning_traces_analysis.json
     evaluate_all_seeker_choices.py    ← batch question-choice evaluation from runs.csv
     evaluate_seeker_choices.py        ← single-conversation question-choice evaluation
@@ -287,7 +283,6 @@ Note: the `dgx/` shell wrappers (e.g. `run_synthesize_traces.sh`, `run_analyze_t
 
 **Post-processing & data maintenance:**
 - `scripts/audit_experiments.py` — walks `configs/full/**/*.yaml`, reports DONE / INCOMPLETE / MISSING per config by counting unique `(target_id, run_index)` pairs in each `runs.csv`. Use to find gaps before resubmitting.
-- `scripts/reasoning_traces/synthesize_from_runs_csv.py` — batch synthesize reasoning traces from runs.csv with custom settings (alternative to `run_synthesize_traces.sh`)
 - `scripts/remove_duplicates_runs.py` — remove duplicate rows from runs.csv by `(target_id, run_index)` pair
 - `scripts/reasoning_traces/evaluate_seeker_choices.py` — evaluate a single conversation's question choices (debug-friendly version of batch evaluator)
 - `scripts/delete_evaluations_with_connection_errors.py` — clean up failed evaluation runs
