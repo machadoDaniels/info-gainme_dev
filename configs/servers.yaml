@@ -2,25 +2,29 @@
 # Update this file when IPs or ports change — do NOT edit individual configs for this.
 #
 # Format:
-#   <served-model-name>: "<base_url>"
-
-# H100-02: 10.100.0.112
-# H100-03: 10.100.0.113
-# B200-1: 10.100.0.121
+#   servers.<served-model-name>: "<base_url>"   — runtime vLLM endpoint (used by config_loader)
+#   hf_paths.<served-model-name>: "<hf_repo>"   — HF repo id (for humans + run_full_benchmark.sh convenience)
+#
+# Node IPs (internal):
+#   H100-02 — 10.100.0.112
+#   H100-03 — 10.100.0.113
+#   B200-1  — 10.100.0.121
 
 servers:
   # --- Ablation pruner/oracle + standalone seeker models ---
   # Update IPs/ports before running jobs
-  Nemotron-Mini-4B-Instruct: "http://CHANGE_ME/v1"      # nvidia/Nemotron-Mini-4B-Instruct (instruct only, no thinking)
-  Nemotron-Cascade-8B: "http://CHANGE_ME/v1"            # nvidia/Nemotron-Cascade-8B (instruct; /no_think disables reasoning)
-  Nemotron-Cascade-8B-Thinking: "http://CHANGE_ME/v1"   # nvidia/Nemotron-Cascade-8B-Thinking (always thinks)
-  Gemma-3-12B-IT: "http://CHANGE_ME/v1"                 # google/gemma-3-12b-it (no thinking support — Gemma 3)
+  Nemotron-Mini-4B-Instruct: "http://CHANGE_ME/v1"
+  Nemotron-Cascade-8B: "http://CHANGE_ME/v1"
+  Nemotron-Cascade-8B-Thinking: "http://CHANGE_ME/v1"
+  Gemma-3-12B-IT: "http://CHANGE_ME/v1"
+  Gemma-3-4B-IT: "http://CHANGE_ME/v1"
+  Gemma-4-E4B: "http://CHANGE_ME/v1"
 
   Qwen/Qwen3-235B-A22B-Instruct-2507-FP8: "http://10.100.0.111:8026/v1"
   meta-llama/Llama-3.3-70B-Instruct: "http://10.100.0.111:8030/v1"
-  meta-llama/Llama-3.2-11B-Vision-Instruct: "http://CHANGE_ME/v1"   # meta-llama/Llama-3.2-11B-Vision-Instruct
-  meta-llama/Llama-3.2-3B-Instruct: "http://CHANGE_ME/v1"           # meta-llama/Llama-3.2-3B-Instruct
-  meta-llama/Llama-3.2-1B-Instruct: "http://CHANGE_ME/v1"           # meta-llama/Llama-3.2-1B-Instruct
+  meta-llama/Llama-3.2-11B-Vision-Instruct: "http://CHANGE_ME/v1"
+  meta-llama/Llama-3.2-3B-Instruct: "http://CHANGE_ME/v1"
+  meta-llama/Llama-3.2-1B-Instruct: "http://CHANGE_ME/v1"
 
   Qwen3-8B: "http://10.100.0.113:9200/v1"
   Qwen3-30B-A3B-Thinking-2507: "http://10.100.0.121:8029/v1"
@@ -28,3 +32,31 @@ servers:
   Qwen3-4B-Thinking-2507: "http://10.100.0.112:8021/v1"
   Qwen3-4B-Instruct-2507: "http://10.100.0.113:8026/v1"
   Qwen3-0.6B: "http://10.100.0.113:8025/v1"
+
+# Served-model-name → HuggingFace repo id.
+# Used by dgx/run_full_benchmark.sh (auto-resolves MODEL1/MODEL2 from *_NAME) and as a quick reference.
+hf_paths:
+  # Nvidia
+  Nemotron-Mini-4B-Instruct: "nvidia/Nemotron-Mini-4B-Instruct"         # instruct only, no thinking
+  Nemotron-Cascade-8B: "nvidia/Nemotron-Cascade-8B"                     # dual-mode; /no_think disables reasoning
+  Nemotron-Cascade-8B-Thinking: "nvidia/Nemotron-Cascade-8B-Thinking"   # always thinks
+
+  # Google Gemma
+  Gemma-3-4B-IT: "google/gemma-3-4b-it"                                 # Gemma 3 — no thinking
+  Gemma-3-12B-IT: "google/gemma-3-12b-it"                               # Gemma 3 — no thinking
+  Gemma-4-E4B: "google/gemma-4-E4B"                                     # Gemma 4 — configurable thinking
+
+  # Meta Llama
+  meta-llama/Llama-3.2-1B-Instruct: "meta-llama/Llama-3.2-1B-Instruct"
+  meta-llama/Llama-3.2-3B-Instruct: "meta-llama/Llama-3.2-3B-Instruct"
+  meta-llama/Llama-3.2-11B-Vision-Instruct: "meta-llama/Llama-3.2-11B-Vision-Instruct"
+  meta-llama/Llama-3.3-70B-Instruct: "meta-llama/Llama-3.3-70B-Instruct"
+
+  # Qwen
+  Qwen3-0.6B: "Qwen/Qwen3-0.6B"
+  Qwen3-4B-Instruct-2507: "Qwen/Qwen3-4B-Instruct-2507"
+  Qwen3-4B-Thinking-2507: "Qwen/Qwen3-4B-Thinking-2507"
+  Qwen3-8B: "Qwen/Qwen3-8B"
+  Qwen3-30B-A3B-Thinking-2507: "Qwen/Qwen3-30B-A3B-Thinking-2507"
+  Qwen3-30B-A3B-Instruct-2507: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  Qwen/Qwen3-235B-A22B-Instruct-2507-FP8: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8"
