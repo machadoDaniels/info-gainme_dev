@@ -82,12 +82,31 @@ def main() -> int:
         return 0
 
     try:
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import hf_hub_download, snapshot_download
+        from huggingface_hub.utils import EntryNotFoundError
     except ImportError:
         print("Error: huggingface_hub not installed. Run: pip install huggingface_hub")
         return 1
 
     outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Pull the unified index CSV first so it's available for inspection even
+    # if the full download is interrupted.
+    index_filename = "unified_experiments.csv"
+    print(f"Fetching index: {index_filename} ...")
+    try:
+        hf_hub_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            filename=index_filename,
+            local_dir=str(outputs_dir),
+            token=token,
+        )
+        print(f"  → {outputs_dir / index_filename}\n")
+    except EntryNotFoundError:
+        print(f"  (index not found in repo — skipping)\n")
+    except Exception as exc:
+        print(f"  (index fetch failed: {exc} — continuing with full download)\n")
 
     print(f"Downloading {repo_id} → {outputs_dir} ...")
     print("Download is resumable — safe to interrupt and re-run.\n")
