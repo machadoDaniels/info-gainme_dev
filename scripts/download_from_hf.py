@@ -53,7 +53,7 @@ def main() -> int:
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
+        default=2,
         help="Parallel download workers",
     )
     parser.add_argument(
