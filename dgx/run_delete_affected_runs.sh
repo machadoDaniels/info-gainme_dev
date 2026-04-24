@@ -41,7 +41,7 @@ sg "${SHARED_GROUP}" -c "
         --pwd /workspace/projects/info-gainme_dev \
         '${SINGULARITY_IMAGE}' \
         bash -c \"
-            python3 scripts/delete_affected_runs.py ${SCRIPT_ARGS}
+            python3 scripts/maintenance/delete_affected_runs.py ${SCRIPT_ARGS}
         \"
 "
 

@@ -22,9 +22,9 @@ fi
 echo "=========================================="
 
 if [ -n "${CSV_PATH}" ]; then
-    ANALYSIS_CMD="python3 scripts/analyze_results.py '${CSV_PATH}'"
+    ANALYSIS_CMD="python3 scripts/analysis/analyze_results.py '${CSV_PATH}'"
 else
-    ANALYSIS_CMD="python3 scripts/analyze_results.py --all"
+    ANALYSIS_CMD="python3 scripts/analysis/analyze_results.py --all"
 fi
 
 sg "${SHARED_GROUP}" -c "
@@ -35,7 +35,7 @@ sg "${SHARED_GROUP}" -c "
         bash -c \"
             pip install --user -r requirements.txt 2>/dev/null
             ${ANALYSIS_CMD}
-            python3 scripts/generate_unified_csv.py
+            python3 scripts/analysis/generate_unified_csv.py
         \"
 "
 

@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 # Garantir imports do projeto
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.analysis.loader import load_experiment_results
 
@@ -177,7 +177,7 @@ def _iter_experiments(base_outputs_dir: Path) -> list[dict]:
 
 def main() -> int:
     """Ponto de entrada para geração do CSV unificado."""
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
     default_base = repo_root / "outputs"
     default_out = default_base / "unified_experiments.csv"
 

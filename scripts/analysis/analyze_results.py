@@ -18,7 +18,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 
 # Garantir imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.analysis.loader import load_experiment_results
 from src.analysis.writer import save_summary, save_city_variance
@@ -41,7 +41,7 @@ def _analyze_single_csv(csv_path_str: str, verbose: bool = True, force: bool = F
 
     # Calcular repo_root baseado no caminho do script
     script_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
-    repo_root = script_dir.parent
+    repo_root = script_dir.parent.parent
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
@@ -137,7 +137,7 @@ def _analyze_single_csv(csv_path_str: str, verbose: bool = True, force: bool = F
 def main():
     """Main entry point for results analysis."""
     # Base de outputs padrão relativa ao projeto
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
     default_outputs_dir = repo_root / "outputs"
 
     # Compatibilidade legado: CSV padrão específico (se nada for passado)

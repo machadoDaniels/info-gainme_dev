@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 # Allow running from repo root or scripts/
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
     from dotenv import load_dotenv
