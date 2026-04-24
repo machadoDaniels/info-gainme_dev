@@ -2,10 +2,10 @@
 """Upload outputs/ to a HuggingFace Dataset repository.
 
 Usage:
-    python scripts/upload_to_hf.py
-    python scripts/upload_to_hf.py --repo-id akcit-rl/info-gainme
-    python scripts/upload_to_hf.py --outputs-dir outputs/ --num-workers 16
-    python scripts/upload_to_hf.py --dry-run
+    python scripts/hf/upload_to_hf.py
+    python scripts/hf/upload_to_hf.py --repo-id akcit-rl/info-gainme
+    python scripts/hf/upload_to_hf.py --outputs-dir outputs/ --num-workers 16
+    python scripts/hf/upload_to_hf.py --dry-run
 
 Requirements:
     pip install huggingface_hub
@@ -17,8 +17,9 @@ import os
 import sys
 from pathlib import Path
 
-# Allow running from repo root or scripts/
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from huggingface_hub import HfApi
 
 try:
     from dotenv import load_dotenv
@@ -69,12 +70,6 @@ def main() -> int:
         help="HuggingFace write token (defaults to HF_TOKEN env var)",
     )
     parser.add_argument(
-        "--public",
-        action="store_true",
-        default=False,
-        help="Make the repository public (default: private)",
-    )
-    parser.add_argument(
         "--num-workers",
         type=int,
         default=8,
@@ -103,7 +98,6 @@ def main() -> int:
         print(f"Error: outputs directory not found: {outputs_dir}")
         return 1
 
-    private = not args.public
     repo_id = args.repo_id
 
     # --- count files ---
@@ -113,31 +107,10 @@ def main() -> int:
 
     if args.dry_run:
         print(f"\n[Dry run] Would upload to: https://huggingface.co/datasets/{repo_id}")
-        print(f"[Dry run] private={private}, workers={args.num_workers}")
+        print(f"[Dry run] workers={args.num_workers}")
         return 0
 
-    # --- import huggingface_hub ---
-    try:
-        from huggingface_hub import HfApi
-    except ImportError:
-        print("Error: huggingface_hub not installed. Run: pip install huggingface_hub")
-        return 1
-
     api = HfApi(token=token)
-
-    # --- create repo (idempotent) ---
-    print(f"\nEnsuring dataset repo exists: {repo_id} (private={private}) ...")
-    try:
-        api.create_repo(
-            repo_id=repo_id,
-            repo_type="dataset",
-            private=private,
-            exist_ok=True,
-        )
-        print(f"Repo ready: https://huggingface.co/datasets/{repo_id}")
-    except Exception as exc:
-        print(f"Error creating/accessing repo: {exc}")
-        return 1
 
     # --- upload ---
     print(f"\nUploading {outputs_dir}/ → {repo_id} ...")

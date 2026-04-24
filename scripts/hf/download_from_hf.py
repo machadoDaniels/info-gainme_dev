@@ -2,10 +2,10 @@
 """Download outputs/ from a HuggingFace Dataset repository.
 
 Usage:
-    python scripts/download_from_hf.py
-    python scripts/download_from_hf.py --repo-id akcit-rl/info-gainme
-    python scripts/download_from_hf.py --outputs-dir outputs/ --num-workers 16
-    python scripts/download_from_hf.py --dry-run
+    python scripts/hf/download_from_hf.py
+    python scripts/hf/download_from_hf.py --repo-id akcit-rl/info-gainme
+    python scripts/hf/download_from_hf.py --outputs-dir outputs/ --num-workers 16
+    python scripts/hf/download_from_hf.py --dry-run
 
 Requirements:
     pip install huggingface_hub
@@ -53,7 +53,7 @@ def main() -> int:
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
+        default=2,
         help="Parallel download workers",
     )
     parser.add_argument(

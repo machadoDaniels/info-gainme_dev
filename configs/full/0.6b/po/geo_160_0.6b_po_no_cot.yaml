@@ -1,5 +1,5 @@
-# Benchmark Configuration - Objects Full (158 objects, 0.6B, PO + No COT)
-# Run: python benchmark_runner.py --config configs/full/0.6b/objects_158_0.6b_po_no_cot.yaml
+# Benchmark Configuration - Geo Full (160 cities, PO + No COT)
+# Run: python benchmark_runner.py --config configs/full/0.6b/geo_160_0.6b_po_no_cot.yaml
 
 models:
   seeker:
@@ -22,13 +22,13 @@ game:
   max_turns: 30
 
 dataset:
-  type: "objects"
-  csv_path: "data/objects/objects_full.csv"
+  type: "geo"
+  csv_path: "data/geo/top_160_pop_cities.csv"
   num_targets: null
   runs_per_target: 1
 
 experiment:
-  name: "objects_158_0.6b_po_no_cot"
+  name: "geo_160_0.6b_po_no_cot_with_kickoff"
   max_workers: 32
   tags: {}
 

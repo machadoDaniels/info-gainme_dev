@@ -1,14 +1,14 @@
-# Benchmark Configuration - Objects Full (158 objects, 0.6B, PO + COT)
-# Run: python benchmark_runner.py --config configs/full/0.6b/objects_158_0.6b_po_cot.yaml
+# Benchmark Configuration - Objects Full (158 items, Nemotron-Cascade-8B seeker, PO, no CoT)
+# Run: python benchmark_runner.py --config configs/full/nemotron-8b/no_cot/objects_158_nemotron8b_po_no_cot.yaml
+# NOTE: endpoint configured in configs/servers.yaml under "Nemotron-Cascade-8B"
 
 models:
   seeker:
-    model: "Qwen3-0.6B"
+    model: "Nemotron-Cascade-8B" #HF_PATH=nvidia/Nemotron-Cascade-8B
     timeout: 120.0
     extra_body:
       chat_template_kwargs:
-        enable_thinking: true
-    use_reasoning: true
+        enable_thinking: false
 
   oracle:
     model: "Qwen3-8B"
@@ -29,8 +29,8 @@ dataset:
   runs_per_target: 1
 
 experiment:
-  name: "objects_158_0.6b_po_cot"
-  max_workers: 32
+  name: "objects_158_nemotron8b_po_no_cot_with_kickoff"
+  max_workers: 16
   tags: {}
 
 output:

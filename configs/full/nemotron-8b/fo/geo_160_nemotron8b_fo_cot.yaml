@@ -1,11 +1,14 @@
-# Benchmark - Geo (160, Nemotron-Cascade-8B-Thinking seeker, FULLY_OBSERVABLE, CoT)
-# HF: nvidia/Nemotron-Cascade-8B-Thinking  (always thinks — no enable_thinking flag needed)
+# Benchmark - Geo (160, Nemotron-Cascade-8B seeker, FULLY_OBSERVABLE, CoT)
+# HF: nvidia/Nemotron-Cascade-8B  (dual-mode: enable_thinking: true for CoT)
 # Run: python benchmark_runner.py --config configs/full/nemotron-8b/cot/geo_160_nemotron8b_fo_cot.yaml
 
 models:
   seeker:
-    model: "Nemotron-Cascade-8B-Thinking" #HF_PATH=nvidia/Nemotron-Cascade-8B-Thinking
+    model: "Nemotron-Cascade-8B" #HF_PATH=nvidia/Nemotron-Cascade-8B
     timeout: 300.0
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
     use_reasoning: true
 
   oracle:
@@ -27,7 +30,7 @@ dataset:
   runs_per_target: 1
 
 experiment:
-  name: "geo_160_nemotron8b_fo_cot"
+  name: "geo_160_nemotron8b_fo_cot_with_kickoff"
   max_workers: 8
   tags: {}
 
