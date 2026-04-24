@@ -16,10 +16,8 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from huggingface_hub import HfApi
 
-# Allow running from repo root or scripts/
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from huggingface_hub import HfApi
 
 try:
     from dotenv import load_dotenv
@@ -70,12 +68,6 @@ def main() -> int:
         help="HuggingFace write token (defaults to HF_TOKEN env var)",
     )
     parser.add_argument(
-        "--public",
-        action="store_true",
-        default=False,
-        help="Make the repository public (default: private)",
-    )
-    parser.add_argument(
         "--num-workers",
         type=int,
         default=8,
@@ -104,7 +96,6 @@ def main() -> int:
         print(f"Error: outputs directory not found: {outputs_dir}")
         return 1
 
-    private = not args.public
     repo_id = args.repo_id
 
     # --- count files ---
@@ -114,7 +105,7 @@ def main() -> int:
 
     if args.dry_run:
         print(f"\n[Dry run] Would upload to: https://huggingface.co/datasets/{repo_id}")
-        print(f"[Dry run] private={private}, workers={args.num_workers}")
+        print(f"[Dry run] workers={args.num_workers}")
         return 0
 
     api = HfApi(token=token)
