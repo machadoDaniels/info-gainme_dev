@@ -7,7 +7,7 @@
 #   b200 — dgx-B200-1   10.100.0.121
 #   all  — both (sequential)
 
-set -euo pipefail
+set -uo pipefail
 
 PROJECT=/raid/user_danielpedrozo/projects/info-gainme_dev
 DEST="$PROJECT/outputs/models/"
@@ -29,18 +29,21 @@ sync_node() {
     echo "    Log: $logfile"
     echo "    Started: $(date)"
 
-    rsync -rltv --ignore-existing \
+    rsync -rlv --omit-dir-times --ignore-existing \
         "${ip}:${DEST}" \
         "$DEST" \
         >> "$logfile" 2>&1
-
     local rc=$?
-    if [ $rc -eq 0 ]; then
-        echo "    Done: $(date)"
+
+    local transferred
+    transferred=$(grep -c '^s_' "$logfile" 2>/dev/null) || transferred=0
+
+    if [ $rc -eq 0 ] || [ $rc -eq 23 ]; then
+        echo "    Done: $(date) — ~${transferred} paths transferred (exit $rc)"
     else
         echo "    FAILED (exit $rc) — check $logfile"
     fi
-    return $rc
+    return 0
 }
 
 case "$TARGET" in
