@@ -34,7 +34,7 @@ sg "${SHARED_GROUP}" -c "
         '${SINGULARITY_IMAGE}' \
         bash -c \"
             pip install --quiet --user huggingface_hub python-dotenv
-            python3 scripts/download_from_hf.py ${EXTRA_ARGS}
+            python3 scripts/hf/download_from_hf.py ${EXTRA_ARGS}
         \"
 " >> "${LOG_FILE}" 2>&1 &
 

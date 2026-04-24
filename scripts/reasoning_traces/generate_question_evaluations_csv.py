@@ -156,7 +156,7 @@ def main() -> int:
     Returns:
         Código de saída (0 = sucesso, 1 = erro).
     """
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
     default_base = repo_root / "outputs"
     default_out = default_base / "question_evaluations_unified.csv"
 

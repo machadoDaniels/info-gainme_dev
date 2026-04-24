@@ -129,7 +129,7 @@ def recalculate_se_for_summary(summary_path: Path) -> bool:
 
 def main() -> int:
     """Ponto de entrada para recalcular SEs."""
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
     default_base = repo_root / "outputs"
     
     # Argumentos opcionais

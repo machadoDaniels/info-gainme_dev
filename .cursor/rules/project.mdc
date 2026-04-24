@@ -35,7 +35,12 @@ demos/
   demo_objects_game.py   # Demo single game (objects)
   demo_diseases_game.py  # Demo single game (diseases)
 scripts/
-  analyze_results.py  # Análise de resultados e geração de JSONs
+  analysis/           # métricas, agregações, baselines, plots
+  data_prep/          # preparação de datasets
+  hf/                 # sync HuggingFace
+  maintenance/        # reparo / limpeza de runs.csv
+  reasoning_traces/   # síntese + avaliação post-hoc de CoT
+  question_classification/  # classificação post-hoc de perguntas
 data/                 # entradas (CSV files)
 outputs/              # artefatos (CSV, JSON, PNG, conversas)
 logs/                 # logs de execução
@@ -55,7 +60,7 @@ logs/                 # logs de execução
 ## Fluxo de execução
 1. **Single Game**: `demos/demo_single_game.py` → `Orchestrator.from_target()` → `orchestrator.run()`
 2. **Multi-Game**: `benchmark_runner.py` → `BenchmarkRunner` → múltiplos `Orchestrator` → CSV + conversas
-3. **Analysis**: `scripts/analyze_results.py` → `load_experiment_results()` → `summary.json` + `variance.json`
+3. **Analysis**: `scripts/analysis/analyze_results.py` → `load_experiment_results()` → `summary.json` + `variance.json`
 4. **Data Flow**: `load_geo_graph()` → `KnowledgeGraph` → `Orchestrator` → results
 
 ## Agentes e responsabilidades

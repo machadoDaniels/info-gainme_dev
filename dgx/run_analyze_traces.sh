@@ -25,9 +25,9 @@ sg "${SHARED_GROUP}" -c "
         '${SINGULARITY_IMAGE}' \
         bash -c \"
             pip install --user -r requirements.txt 2>/dev/null
-            python3 scripts/generate_unified_csv.py '${OUTPUTS_DIR}'
-            python3 scripts/generate_model_summary_csv.py '${OUTPUTS_DIR}'
-            python3 scripts/analyze_reasoning_traces.py '${OUTPUTS_DIR}'
+            python3 scripts/analysis/generate_unified_csv.py '${OUTPUTS_DIR}'
+            python3 scripts/analysis/generate_model_summary_csv.py '${OUTPUTS_DIR}'
+            python3 scripts/reasoning_traces/analyze_traces.py '${OUTPUTS_DIR}'
         \"
 "
 

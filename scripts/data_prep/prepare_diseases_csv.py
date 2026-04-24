@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parent.parent.parent
     src_path = project_root / "data/diseases/Final_Augmented_dataset_Diseases_and_Symptoms.csv"
     out_dir = project_root / "data/diseases"
     out_dir.mkdir(parents=True, exist_ok=True)

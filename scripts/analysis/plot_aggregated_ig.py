@@ -21,7 +21,7 @@ import matplotlib
 import numpy as np
 
 # Garantir imports do projeto
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Configurar matplotlib para usar backend não-interativo
 matplotlib.use('Agg')

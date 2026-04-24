@@ -32,7 +32,7 @@ sg "${SHARED_GROUP}" -c "
         --pwd /workspace/projects/info-gainme_dev \
         '${SINGULARITY_IMAGE}' \
         bash -c \"
-            python3 scripts/validate_oracle_answers.py '${BASE_DIR}' ${EXTRA_ARGS}
+            python3 scripts/maintenance/validate_oracle_answers.py '${BASE_DIR}' ${EXTRA_ARGS}
         \"
 "
 

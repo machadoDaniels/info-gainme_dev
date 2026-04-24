@@ -2,10 +2,10 @@
 """Upload outputs/ to a HuggingFace Dataset repository.
 
 Usage:
-    python scripts/upload_to_hf.py
-    python scripts/upload_to_hf.py --repo-id akcit-rl/info-gainme
-    python scripts/upload_to_hf.py --outputs-dir outputs/ --num-workers 16
-    python scripts/upload_to_hf.py --dry-run
+    python scripts/hf/upload_to_hf.py
+    python scripts/hf/upload_to_hf.py --repo-id akcit-rl/info-gainme
+    python scripts/hf/upload_to_hf.py --outputs-dir outputs/ --num-workers 16
+    python scripts/hf/upload_to_hf.py --dry-run
 
 Requirements:
     pip install huggingface_hub
@@ -16,6 +16,8 @@ import argparse
 import os
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from huggingface_hub import HfApi
 

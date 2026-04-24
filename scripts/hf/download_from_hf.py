@@ -2,10 +2,10 @@
 """Download outputs/ from a HuggingFace Dataset repository.
 
 Usage:
-    python scripts/download_from_hf.py
-    python scripts/download_from_hf.py --repo-id akcit-rl/info-gainme
-    python scripts/download_from_hf.py --outputs-dir outputs/ --num-workers 16
-    python scripts/download_from_hf.py --dry-run
+    python scripts/hf/download_from_hf.py
+    python scripts/hf/download_from_hf.py --repo-id akcit-rl/info-gainme
+    python scripts/hf/download_from_hf.py --outputs-dir outputs/ --num-workers 16
+    python scripts/hf/download_from_hf.py --dry-run
 
 Requirements:
     pip install huggingface_hub
@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
     from dotenv import load_dotenv

@@ -238,22 +238,27 @@ src/
   logging_config.py        ← centralized logging setup (called at process start)
   prompts/                 ← Markdown system prompts for each agent (templated)
 scripts/
-  analyze_results.py              ← runs.csv → summary.json + variance.json (wraps analysis/writer)
-  generate_unified_csv.py         ← merges all experiments into outputs/unified_experiments.csv
-  generate_model_summary_csv.py   ← per-model aggregation CSV
-  aggregate_metrics_by_city.py    ← city-level metric aggregation
-  aggregate_ig_over_time.py       ← IG-over-turns aggregation
-  aggregate_cold_start.py         ← aggregate cold-start results
-  plot_aggregated_ig.py           ← plot IG-over-turns curves
-  compute_optimal_baseline.py     ← optimal-play upper-bound baseline
-  extract_top_cities_by_population.py  ← data prep helper
-  prepare_diseases_csv.py         ← prepare diseases CSV for dataset creation
-  remove_duplicates_runs.py       ← de-dup runs.csv by (target_id, run_index)
-  validate_oracle_answers.py      ← re-check Oracle answers against the ground truth
-  delete_affected_runs.py         ← remove runs affected by oracle bugs
-  delete_evaluations_with_connection_errors.py
-  recalculate_question_evaluation_se.py
-  download_from_hf.py / upload_to_hf.py  ← HuggingFace dataset sync (see also dgx/ shell wrappers)
+  analysis/                       ← post-hoc metric computation & aggregation
+    analyze_results.py              ← runs.csv → summary.json + variance.json (wraps analysis/writer)
+    generate_unified_csv.py         ← merges all experiments into outputs/unified_experiments.csv
+    generate_model_summary_csv.py   ← per-model aggregation CSV
+    aggregate_metrics_by_city.py    ← city-level metric aggregation
+    aggregate_ig_over_time.py       ← IG-over-turns aggregation
+    aggregate_cold_start.py         ← aggregate cold-start results
+    plot_aggregated_ig.py           ← plot IG-over-turns curves
+    compute_optimal_baseline.py     ← optimal-play upper-bound baseline
+  data_prep/                      ← dataset-creation helpers
+    prepare_diseases_csv.py
+    extract_top_cities_by_population.py
+  hf/                             ← HuggingFace dataset sync (see also dgx/ shell wrappers)
+    download_from_hf.py
+    upload_to_hf.py
+  maintenance/                    ← runs.csv repair / cleanup utilities
+    remove_duplicates_runs.py       ← de-dup runs.csv by (target_id, run_index)
+    validate_oracle_answers.py      ← re-check Oracle answers against the ground truth
+    delete_affected_runs.py         ← remove runs affected by oracle bugs
+    delete_evaluations_with_connection_errors.py
+    recalculate_question_evaluation_se.py
   reasoning_traces/               ← CoT trace synthesis + question-choice evaluation
     synthesize_traces.py              ← batch synthesize traces (--all / --runs / --seeker-file)
     analyze_traces.py                 ← seeker_traces.json → reasoning_traces_analysis.json
@@ -267,7 +272,7 @@ scripts/
     flatten_question_classifications.py
 ```
 
-Note: the `dgx/` shell wrappers (e.g. `run_synthesize_traces.sh`, `run_analyze_traces.sh`) still work — they were updated to point at the new `scripts/reasoning_traces/` locations.
+Note: the `dgx/` shell wrappers were updated to point at the current `scripts/<subfolder>/` layout.
 
 **Key flow:** `benchmark_runner.py` / `human_benchmark_runner.py` → `BenchmarkRunner.run()` → per game: `Orchestrator.from_target()` → loop: Seeker asks → Oracle answers → Pruner prunes → entropy computed → `TurnState` appended → results written to `runs.csv`.
 
@@ -283,10 +288,10 @@ Note: the `dgx/` shell wrappers (e.g. `run_synthesize_traces.sh`, `run_analyze_t
 
 **Post-processing & data maintenance:**
 - `scripts/audit_experiments.py` — walks `configs/full/**/*.yaml`, reports DONE / INCOMPLETE / MISSING per config by counting unique `(target_id, run_index)` pairs in each `runs.csv`. Use to find gaps before resubmitting.
-- `scripts/remove_duplicates_runs.py` — remove duplicate rows from runs.csv by `(target_id, run_index)` pair
+- `scripts/maintenance/remove_duplicates_runs.py` — remove duplicate rows from runs.csv by `(target_id, run_index)` pair
 - `scripts/reasoning_traces/evaluate_seeker_choices.py` — evaluate a single conversation's question choices (debug-friendly version of batch evaluator)
-- `scripts/delete_evaluations_with_connection_errors.py` — clean up failed evaluation runs
-- `scripts/recalculate_question_evaluation_se.py` — recalculate standard error for existing evaluations
+- `scripts/maintenance/delete_evaluations_with_connection_errors.py` — clean up failed evaluation runs
+- `scripts/maintenance/recalculate_question_evaluation_se.py` — recalculate standard error for existing evaluations
 
 ## Output structure
 

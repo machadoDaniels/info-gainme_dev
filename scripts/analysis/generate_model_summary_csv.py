@@ -26,7 +26,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def _load_unified_csv(unified_csv: Path) -> list[dict]:
@@ -80,7 +80,7 @@ def _round(v: float, n: int = 4) -> float | str:
 
 
 def main() -> int:
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
     outputs_dir = Path(sys.argv[1]) if len(sys.argv) >= 2 else repo_root / "outputs"
     output_csv = Path(sys.argv[2]) if len(sys.argv) >= 3 else outputs_dir / "model_summary.csv"
 
