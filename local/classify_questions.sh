@@ -20,6 +20,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON="${PROJECT_DIR}/.venv/bin/python3"
 BACKEND="${BACKEND:-qwen235b}"
+RUN_TS="${RUN_TS:-$(date +%Y%m%d-%H%M%S)}"
 
 case "$BACKEND" in
     qwen235b)
@@ -67,12 +68,21 @@ EXTRA_FLAGS="${*:-}"
 
 if [ -n "${STY:-}" ]; then
     cd "${PROJECT_DIR}"
-    echo "=== Classificação de perguntas — $(date) ==="
+    mkdir -p logs
+    LOG_FILE="${LOG_FILE:-${PROJECT_DIR}/logs/classify-${BACKEND}-${RUN_TS}.out}"
+    ln -sfn "${LOG_FILE}" "${PROJECT_DIR}/logs/classify-latest.out"
+    if [ -z "${__LOG_REDIRECTED__:-}" ]; then
+        export __LOG_REDIRECTED__=1
+        exec > >(tee -a "${LOG_FILE}") 2>&1
+    fi
+    echo "=== Classificação de perguntas — RUN ${RUN_TS} ==="
     echo "Backend:     ${BACKEND}"
     echo "Endpoint:    ${BASE_URL}"
     echo "Modelo:      ${MODEL}"
     echo "Concurrency: ${MAX_CONCURRENCY}"
     echo "Flags:       ${EXTRA_FLAGS:-(nenhuma)}"
+    echo "Log:         ${LOG_FILE}"
+    echo "Started:     $(date)"
 
     if [ -n "$TUNNEL" ]; then
         IFS=':' read -r host lport rhost rport <<< "$TUNNEL"
@@ -101,8 +111,9 @@ if [ -n "${STY:-}" ]; then
     echo "CSV: ${PROJECT_DIR}/outputs/question_classifications.csv"
 else
     mkdir -p "${PROJECT_DIR}/logs"
-    echo "Iniciando screen 'classify' (backend=${BACKEND}, modelo=${MODEL})..."
-    screen -dmS classify bash -c "BACKEND='${BACKEND}' bash '${BASH_SOURCE[0]}' ${EXTRA_FLAGS} 2>&1 | tee '${PROJECT_DIR}/logs/classify-local.out'; exec bash"
+    echo "Iniciando screen 'classify' (backend=${BACKEND}, run=${RUN_TS})..."
+    # script faz seu próprio log timestamped (não precisa de tee aqui)
+    screen -dmS classify bash -c "RUN_TS='${RUN_TS}' BACKEND='${BACKEND}' bash '${BASH_SOURCE[0]}' ${EXTRA_FLAGS}; exec bash"
     echo "  screen -r classify"
-    echo "  tail -f ${PROJECT_DIR}/logs/classify-local.out"
+    echo "  tail -f ${PROJECT_DIR}/logs/classify-latest.out"
 fi

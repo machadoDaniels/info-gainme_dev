@@ -14,10 +14,12 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON="${PROJECT_DIR}/.venv/bin/python3"
+RUN_TS="${RUN_TS:-$(date +%Y%m%d-%H%M%S)}"
+BACKEND="${BACKEND:-external}"
 
 BASE_URL="${BASE_URL:-http://200.137.197.131:60002/v1}"
 API_KEY="${API_KEY:-NINGUEM-TA-PURO-2K26}"
-MODEL="${MODEL:-nvidia/Kimi-K2.5-NVFP4}"
+MODEL="${MODEL:-kimi-k26}"
 WORKERS="${WORKERS:-8}"
 TURN_WORKERS="${TURN_WORKERS:-4}"
 
@@ -25,11 +27,21 @@ TURN_WORKERS="${TURN_WORKERS:-4}"
 ARGS="${@:---all}"
 
 if [ -n "${STY:-}" ]; then
-    echo "=== Síntese de traces — $(date) ==="
+    mkdir -p "${PROJECT_DIR}/logs"
+    LOG_FILE="${LOG_FILE:-${PROJECT_DIR}/logs/traces-${BACKEND}-${RUN_TS}.out}"
+    ln -sfn "${LOG_FILE}" "${PROJECT_DIR}/logs/traces-latest.out"
+    if [ -z "${__LOG_REDIRECTED__:-}" ]; then
+        export __LOG_REDIRECTED__=1
+        exec > >(tee -a "${LOG_FILE}") 2>&1
+    fi
+    echo "=== Síntese de traces — RUN ${RUN_TS} ==="
+    echo "Backend:  ${BACKEND}"
     echo "Endpoint: ${BASE_URL}"
     echo "Modelo:   ${MODEL}"
     echo "Workers:  ${WORKERS} conv x ${TURN_WORKERS} turns"
     echo "Args:     ${ARGS}"
+    echo "Log:      ${LOG_FILE}"
+    echo "Started:  $(date)"
     echo "===================================="
 
     cd "${PROJECT_DIR}"
@@ -51,9 +63,9 @@ if [ -n "${STY:-}" ]; then
     echo "JSONL:    ${PROJECT_DIR}/outputs/seeker_traces.jsonl"
     echo "Resumo:   ${PROJECT_DIR}/outputs/reasoning_traces_analysis.json"
 else
-    echo "Iniciando screen 'traces'..."
-    screen -dmS traces bash -c "bash '${BASH_SOURCE[0]}' ${ARGS} 2>&1 | tee '${PROJECT_DIR}/logs/traces-local.out'; exec bash"
-    echo "Rodando em background. Para acompanhar:"
+    mkdir -p "${PROJECT_DIR}/logs"
+    echo "Iniciando screen 'traces' (backend=${BACKEND}, run=${RUN_TS})..."
+    screen -dmS traces bash -c "RUN_TS='${RUN_TS}' BACKEND='${BACKEND}' bash '${BASH_SOURCE[0]}' ${ARGS}; exec bash"
     echo "  screen -r traces"
-    echo "  tail -f ${PROJECT_DIR}/logs/traces-local.out"
+    echo "  tail -f ${PROJECT_DIR}/logs/traces-latest.out"
 fi

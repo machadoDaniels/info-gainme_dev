@@ -1,11 +1,22 @@
 #!/bin/bash
-# Roda síntese de reasoning traces direto na DGX (sem SLURM)
+# Roda síntese de reasoning traces direto na DGX (sem SLURM).
+#
+# Cada run gera log timestamped em logs/traces-<backend>-<YYYYMMDD-HHMMSS>.out
+# + atualiza o symlink logs/traces-latest.out.
+#
 # Uso:
-#   ./run_synthesize_traces.sh                          # processa todos os runs.csv
-#   ./run_synthesize_traces.sh path/to/runs.csv         # processa um CSV específico
-#   ./run_synthesize_traces.sh --model Qwen3-8B         # modelo específico
+#   bash dgx/run_synthesize_traces.sh                   # todos os runs.csv (--all)
+#   bash dgx/run_synthesize_traces.sh path/to/runs.csv  # CSV específico
+#   BACKEND=gptoss bash dgx/run_synthesize_traces.sh    # outro modelo
+#
+# Acompanhar:
+#   screen -r traces
+#   tail -f logs/traces-latest.out
 
 umask 002
+
+# Tag única deste run.
+RUN_TS="${RUN_TS:-$(date +%Y%m%d-%H%M%S)}"
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm_openai_latest.sif"
@@ -45,15 +56,28 @@ MODEL_ARGS="--model '${MODEL}' --workers ${WORKERS} --turn-workers ${TURN_WORKER
 [ -n "${BASE_URL}" ] && MODEL_ARGS="${MODEL_ARGS} --base-url '${BASE_URL}'"
 [ -n "${API_KEY}" ]  && MODEL_ARGS="${MODEL_ARGS} --api-key '${API_KEY}'"
 
+# Log timestamped + symlink "latest". Override via LOG_FILE.
+mkdir -p "${PROJECT_DIR}/logs"
+LOG_FILE="${LOG_FILE:-${PROJECT_DIR}/logs/traces-${BACKEND}-${RUN_TS}.out}"
+ln -sfn "${LOG_FILE}" "${PROJECT_DIR}/logs/traces-latest.out"
+if [ -z "${__LOG_REDIRECTED__:-}" ]; then
+    export __LOG_REDIRECTED__=1
+    exec > >(tee -a "${LOG_FILE}") 2>&1
+fi
+
 echo "=========================================="
-echo "Reasoning Traces Synthesis - $(date)"
-echo "Modelo: ${MODEL}"
-echo "Workers: ${WORKERS} conversas × ${TURN_WORKERS} turns = $(( WORKERS * TURN_WORKERS )) LLM calls max"
+echo "Reasoning Traces Synthesis — RUN ${RUN_TS}"
+echo "Backend:  ${BACKEND}"
+echo "Modelo:   ${MODEL}"
+echo "Endpoint: ${BASE_URL:-(default)}"
+echo "Workers:  ${WORKERS} conversas × ${TURN_WORKERS} turns = $(( WORKERS * TURN_WORKERS )) LLM calls max"
+echo "Log:      ${LOG_FILE}"
+echo "Started:  $(date)"
 if [ -n "${RUNS_PATH}" ]; then
-    echo "CSV: ${RUNS_PATH}"
+    echo "CSV:      ${RUNS_PATH}"
     SYNTHESIS_CMD="python3 scripts/reasoning_traces/synthesize_traces.py --runs '${RUNS_PATH}' ${MODEL_ARGS}"
 else
-    echo "Modo: --all (todos os runs.csv sob outputs/)"
+    echo "Modo:     --all (todos os runs.csv sob outputs/)"
     SYNTHESIS_CMD="python3 scripts/reasoning_traces/synthesize_traces.py --all ${MODEL_ARGS}"
 fi
 echo "=========================================="
@@ -67,5 +91,5 @@ sg sd22 -c "
 "
 
 echo "=========================================="
-echo "Síntese finalizada - $(date)"
+echo "Síntese RUN ${RUN_TS} finalizada — $(date)"
 echo "=========================================="

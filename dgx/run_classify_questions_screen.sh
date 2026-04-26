@@ -2,14 +2,16 @@
 # Roda o classificador de perguntas (scripts/question_classification/classify_questions.py) na DGX via Singularity.
 # Sem SLURM — pensado para ser executado dentro de um screen.
 #
-# Lançamento típico:
-#   screen -dmS classify bash -c \
-#     'bash dgx/run_classify_questions_screen.sh 2>&1 | tee logs/classify-all.out; exec bash'
+# Lançamento típico (script gera log timestamped automaticamente):
+#   screen -dmS classify bash -c 'bash dgx/run_classify_questions_screen.sh; exec bash'
+#
+# Cada run grava em logs/classify-<backend>-<YYYYMMDD-HHMMSS>.out + atualiza
+# logs/classify-latest.out (symlink) pra facilitar tail -f.
 #
 # Acompanhar:
 #   screen -r classify
-#   tail -f logs/classify-all.out
-#   watch -n 10 'find outputs/question_classification -name classification.json | wc -l'
+#   tail -f logs/classify-latest.out
+#   watch -n 10 'wc -l outputs/question_classifications.jsonl'
 #
 # Variáveis de ambiente (com defaults):
 #   BACKEND          qwen235b (default) | external | gptoss | minimax
@@ -21,6 +23,9 @@
 #   SEED             seed da amostragem estratificada   (default: 42)
 
 umask 002
+
+# Tag única deste run — vai pro nome do log e pro header.
+RUN_TS="${RUN_TS:-$(date +%Y%m%d-%H%M%S)}"
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm_openai_latest.sif"
@@ -62,15 +67,29 @@ EXTRA_FLAGS=""
 mkdir -p "${PROJECT_DIR}/logs"
 mkdir -p "${PROJECT_DIR}/outputs/question_classification"
 
+# Cada run tem seu próprio log timestamped + symlink "latest" pra fácil tail.
+# Override via LOG_FILE=/path/to/log se quiser.
+LOG_FILE="${LOG_FILE:-${PROJECT_DIR}/logs/classify-${BACKEND}-${RUN_TS}.out}"
+ln -sfn "${LOG_FILE}" "${PROJECT_DIR}/logs/classify-latest.out"
+
+# Re-exec redirecionando stdout+stderr pro log (e ainda mostra na tela via tee).
+# Marcador __LOG_REDIRECTED__ evita loop se o re-exec rodar de novo.
+if [ -z "${__LOG_REDIRECTED__:-}" ]; then
+    export __LOG_REDIRECTED__=1
+    exec > >(tee -a "${LOG_FILE}") 2>&1
+fi
+
 echo "=========================================="
-echo "Question Classification - $(date)"
-echo "Project:         ${PROJECT_DIR}"
+echo "Question Classification — RUN ${RUN_TS}"
+echo "Backend:         ${BACKEND}"
 echo "Endpoint:        ${BASE_URL}"
 echo "Model:           ${MODEL}"
 echo "Per-stratum:     ${PER_STRATUM}"
 echo "Max concurrency: ${MAX_CONCURRENCY}"
 echo "Seed:            ${SEED}"
 echo "Flags:           ${EXTRA_FLAGS:-(default: thinking on, resume on)}"
+echo "Log:             ${LOG_FILE}"
+echo "Started:         $(date)"
 echo "=========================================="
 
 CLASSIFY_CMD="python3 scripts/question_classification/classify_questions.py \
@@ -93,6 +112,6 @@ sg sd22 -c "
 "
 
 echo "=========================================="
-echo "Classificação finalizada - $(date)"
+echo "Classificação RUN ${RUN_TS} finalizada — $(date)"
 echo "Resultado em: ${PROJECT_DIR}/outputs/question_classification/summary.json"
 echo "=========================================="
