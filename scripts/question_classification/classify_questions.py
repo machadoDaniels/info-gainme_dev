@@ -344,6 +344,10 @@ async def classify_conversation_batch(
     semaphore: asyncio.Semaphore,
 ) -> list[QuestionClassification]:
     """Single LLM request: classify every turn in the conversation at once."""
+    # vLLM aceita só UM mecanismo de structured output por vez:
+    # `guided_json` (extra_body) é mais estrito que `response_format={"type":"json_object"}`,
+    # então passamos só o primeiro. (Versões antigas do vLLM toleravam ambos; as novas — ex: Qwen3-235B —
+    # retornam BadRequestError "You can only use one kind of guided decoding".)
     extra_body: dict[str, Any] = {"guided_json": BatchClassification.model_json_schema()}
     if thinking:
         extra_body["chat_template_kwargs"] = {"thinking": True}
@@ -355,7 +359,6 @@ async def classify_conversation_batch(
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": build_user_message(turns, domain)},
             ],
-            response_format={"type": "json_object"},
             extra_body=extra_body,
         )
 
