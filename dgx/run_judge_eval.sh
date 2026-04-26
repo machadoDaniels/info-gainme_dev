@@ -44,9 +44,14 @@ WORKERS="${WORKERS:-8}"
 TURN_WORKERS="${TURN_WORKERS:-4}"
 
 # Sampling defaults: piloto = primeiro run por target, 9 alvos espaçados (10, 20, ..., 90).
-# Override passando RUN_INDEX="" e SAMPLE_INDICES="" pra rodar tudo.
+# Override:
+#   - via env exportada antes do sbatch: export SAMPLE_INDICES=0,10,20,...
+#   - via --export inline: SAMPLE_INDICES=0_10_20_... (vírgulas quebram o parser do
+#     SLURM --export; underscores são convertidos em vírgulas aqui).
+#   - desligar amostragem: passar RUN_INDEX="" e SAMPLE_INDICES="".
 RUN_INDEX="${RUN_INDEX-1}"
 SAMPLE_INDICES="${SAMPLE_INDICES-10,20,30,40,50,60,70,80,90}"
+SAMPLE_INDICES="${SAMPLE_INDICES//_/,}"
 
 PROJECT_DIR="/raid/user_danielpedrozo/projects/info-gainme_dev"
 SHARED_GROUP="sd22"
