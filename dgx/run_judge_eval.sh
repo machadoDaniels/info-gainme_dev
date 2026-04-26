@@ -34,8 +34,10 @@ JUDGE_MODEL_NAME="${JUDGE_MODEL_NAME:-gpt-oss-120b}"    # --served-model-name
 JUDGE_GPU_MEM="${JUDGE_GPU_MEM:-0.90}"
 JUDGE_MAX_LEN="${JUDGE_MAX_LEN:-65536}"
 JUDGE_TP_SIZE="${JUDGE_TP_SIZE:-2}"                    # tensor-parallel-size
-# GPT-OSS uses Harmony; vLLM exposes its reasoning parser as "gptoss"
-JUDGE_REASONING_PARSER="${JUDGE_REASONING_PARSER:-gptoss}"
+# GPT-OSS uses Harmony; vLLM 0.16+ registers the parser as "openai_gptoss".
+# Older docs mention "gptoss" — name varies by release; check
+# `vllm serve --help | grep reasoning-parser` if it errors KeyError.
+JUDGE_REASONING_PARSER="${JUDGE_REASONING_PARSER:-openai_gptoss}"
 JUDGE_EXTRA_ARGS="${JUDGE_EXTRA_ARGS:-}"               # any extra vllm flags
 
 TARGET="${TARGET:-all}"                                 # runs.csv | conv dir | "all"
@@ -64,15 +66,12 @@ export HF_HOME=/workspace/hf-cache
 source "${PROJECT_DIR}/.env"
 export HF_TOKEN="${HF_TOKEN:?HF_TOKEN não definido no .env}"
 
-# B200 Blackwell benefits from CUDA graphs; H100 default to enforce-eager for
-# faster cold starts.
-if [ -z "${VLLM_ENFORCE_EAGER:-}" ]; then
-    if [[ "${SLURM_JOB_PARTITION:-}" == *b200* ]]; then
-        VLLM_ENFORCE_EAGER="false"
-    else
-        VLLM_ENFORCE_EAGER="true"
-    fi
-fi
+# gpt-oss-120b hangs in CUDA graph capture on vLLM 0.16 + MXFP4 (intermittent
+# deadlock during shm_broadcast under concurrent traffic). Force eager always
+# for the judge — output is short JSON (~500 tokens), CUDA graphs don't matter
+# for throughput here. Override with VLLM_ENFORCE_EAGER=false if you've
+# verified the bug is fixed in your vLLM version.
+VLLM_ENFORCE_EAGER="${VLLM_ENFORCE_EAGER:-true}"
 
 mkdir -p "${PROJECT_DIR}/logs" "${PROJECT_DIR}/hf-cache"
 LOGS_DIR_HOST="${PROJECT_DIR}/logs"
