@@ -49,6 +49,7 @@ def _collect_oracle_rows(paths: list[Path]) -> list[dict]:
         summary = data.get("summary", {}) or {}
         rows.append({
             "conversation_path": str(p.parent.relative_to(OUTPUTS_BASE)),
+            "judge_eval_path": str(p.relative_to(OUTPUTS_BASE)),
             "experiment": data.get("experiment", ""),
             "target_id": data.get("target_id", ""),
             "target_label": data.get("target_label", ""),
@@ -81,6 +82,7 @@ def _collect_pruner_rows(paths: list[Path]) -> list[dict]:
         summary = data.get("summary", {}) or {}
         rows.append({
             "conversation_path": str(p.parent.relative_to(OUTPUTS_BASE)),
+            "judge_eval_path": str(p.relative_to(OUTPUTS_BASE)),
             "experiment": data.get("experiment", ""),
             "target_id": data.get("target_id", ""),
             "target_label": data.get("target_label", ""),

@@ -36,13 +36,28 @@ export MODEL1="${MODEL1:-Qwen/Qwen3-4B-Thinking-2507}"
 export MODEL1_NAME="${MODEL1_NAME:-Qwen3-4B-Thinking-2507}"
 export MODEL1_GPU_MEM="${MODEL1_GPU_MEM:-0.90}"
 export MODEL1_MAX_LEN="${MODEL1_MAX_LEN:-32000}"
-export MODEL1_REASONING_PARSER="${MODEL1_REASONING_PARSER:-}"
 
 export MODEL2="${MODEL2:-Qwen/Qwen3-8B}"
 export MODEL2_NAME="${MODEL2_NAME:-Qwen3-8B}"
 export MODEL2_GPU_MEM="${MODEL2_GPU_MEM:-0.90}"
 export MODEL2_MAX_LEN="${MODEL2_MAX_LEN:-32000}"
-export MODEL2_REASONING_PARSER="${MODEL2_REASONING_PARSER:-}"
+
+# Auto-detect reasoning parser from served-model-name. Set the env var
+# explicitly to override (e.g., MODEL1_REASONING_PARSER=none disables it).
+auto_reasoning_parser() {
+    local name="${1,,}"  # lowercase
+    case "$name" in
+        *gpt-oss*)            echo "openai_gptoss" ;;
+        *qwen3*)              echo "qwen3" ;;
+        *olmo*think*|*olmo*)  echo "olmo3" ;;
+        *)                    echo "" ;;
+    esac
+}
+[ -z "${MODEL1_REASONING_PARSER+x}" ] && MODEL1_REASONING_PARSER=$(auto_reasoning_parser "${MODEL1_NAME}")
+[ -z "${MODEL2_REASONING_PARSER+x}" ] && MODEL2_REASONING_PARSER=$(auto_reasoning_parser "${MODEL2_NAME}")
+[ "${MODEL1_REASONING_PARSER}" = "none" ] && MODEL1_REASONING_PARSER=""
+[ "${MODEL2_REASONING_PARSER}" = "none" ] && MODEL2_REASONING_PARSER=""
+export MODEL1_REASONING_PARSER MODEL2_REASONING_PARSER
 
 # MODE can be overridden via: sbatch --export=ALL,MODE=dual,CONFIGS_TARGET=configs/full/4b ...
 # All MODEL1/MODEL2 vars can similarly be overridden via --export

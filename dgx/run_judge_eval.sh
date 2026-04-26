@@ -34,16 +34,28 @@ JUDGE_MODEL_NAME="${JUDGE_MODEL_NAME:-gpt-oss-120b}"    # --served-model-name
 JUDGE_GPU_MEM="${JUDGE_GPU_MEM:-0.90}"
 JUDGE_MAX_LEN="${JUDGE_MAX_LEN:-65536}"
 JUDGE_TP_SIZE="${JUDGE_TP_SIZE:-2}"                    # tensor-parallel-size
-# GPT-OSS uses Harmony; vLLM 0.16+ registers the parser as "openai_gptoss".
-# Older docs mention "gptoss" — name varies by release; check
-# `vllm serve --help | grep reasoning-parser` if it errors KeyError.
-JUDGE_REASONING_PARSER="${JUDGE_REASONING_PARSER:-openai_gptoss}"
+# Auto-detect reasoning parser from served-model-name. Required so the model
+# can emit <think> blocks alongside structured JSON output (without the parser,
+# response_format=strict json_schema collapses thinking into nothing).
+# Override: JUDGE_REASONING_PARSER=qwen3 (or =none to disable).
+auto_reasoning_parser() {
+    local name="${1,,}"
+    case "$name" in
+        *gpt-oss*)            echo "openai_gptoss" ;;
+        *qwen3*)              echo "qwen3" ;;
+        *olmo*think*|*olmo*)  echo "olmo3" ;;
+        *)                    echo "" ;;
+    esac
+}
+[ -z "${JUDGE_REASONING_PARSER+x}" ] && JUDGE_REASONING_PARSER=$(auto_reasoning_parser "${JUDGE_MODEL_NAME}")
+[ "${JUDGE_REASONING_PARSER}" = "none" ] && JUDGE_REASONING_PARSER=""
 JUDGE_EXTRA_ARGS="${JUDGE_EXTRA_ARGS:-}"               # any extra vllm flags
 
 TARGET="${TARGET:-all}"                                 # runs.csv | conv dir | "all"
 WHAT="${WHAT:-both}"                                    # oracle | pruner | both
 WORKERS="${WORKERS:-8}"
 TURN_WORKERS="${TURN_WORKERS:-4}"
+FORCE="${FORCE:-}"                                      # set to 1 to overwrite existing _judge_eval.json
 
 # Sampling defaults: piloto = primeiro run por target, 9 alvos espaçados (10, 20, ..., 90).
 # Override:
@@ -204,6 +216,7 @@ esac
 SAMPLE_FLAGS=""
 [ -n "${RUN_INDEX}" ]       && SAMPLE_FLAGS+=" --run-index ${RUN_INDEX}"
 [ -n "${SAMPLE_INDICES}" ]  && SAMPLE_FLAGS+=" --sample-indices ${SAMPLE_INDICES}"
+[ -n "${FORCE}" ]           && SAMPLE_FLAGS+=" --force"
 
 EVAL_CMDS=""
 for t in "${TARGETS[@]}"; do
