@@ -116,6 +116,8 @@ def process_one(
     except Exception as e:
         return False, str(e)
 
+    data["analysis_model"] = llm_config.model
+
     with lock:
         with out_jsonl.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(data, ensure_ascii=False) + "\n")

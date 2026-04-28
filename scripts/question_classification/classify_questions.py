@@ -465,6 +465,7 @@ async def classify_conversation(
         "target": turns_path.parent.name,
         "num_turns": len(turns),
         "turns": turn_payloads,
+        "analysis_model": model,
     }
 
 
