@@ -1,0 +1,42 @@
+# Benchmark - Diseases (160, microsoft/Phi-4-mini-reasoning, FULLY_OBSERVABLE, CoT)
+# Run: python benchmark_runner.py --config configs/full/phi4-mini/cot/diseases_160_phi4_mini_fo_cot.yaml
+
+models:
+  seeker:
+    model: "Phi-4-mini-reasoning" #HF_PATH=microsoft/Phi-4-mini-reasoning
+    timeout: 180.0
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
+    use_reasoning: true
+
+  oracle:
+    model: "Qwen3-8B"
+    timeout: 120.0
+
+  pruner:
+    model: "Qwen3-8B"
+    timeout: 120.0
+
+game:
+  observability_mode: "FULLY_OBSERVABLE"
+  max_turns: 30
+
+dataset:
+  type: "diseases"
+  csv_path: "data/diseases/diseases_full_160.csv"
+  num_targets: null
+  runs_per_target: 1
+
+experiment:
+  name: "diseases_160_phi4_mini_fo_cot"
+  max_workers: 16
+  tags: {}
+
+output:
+  base_dir: "outputs"
+  save_conversations: true
+  save_graph_plots: false
+
+debug:
+  enabled: true
