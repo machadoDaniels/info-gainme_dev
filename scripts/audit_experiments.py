@@ -60,8 +60,12 @@ def find_runs_csv(cfg_data, out_root: Path):
     return seeker, oracle, pruner, triple, exp, runs_csv
 
 
-def count_unique_runs(p: Path) -> int:
-    """Count unique (target_id, run_index) pairs in a runs.csv."""
+def count_unique_runs(p: Path, only_run: int | None = None) -> int:
+    """Count unique (target_id, run_index) pairs in a runs.csv.
+
+    When ``only_run`` is set (e.g. ``1``), only rows whose run_index equals
+    that value are counted (normalised: ``int(ri) == only_run``).
+    """
     if not p or not p.exists():
         return 0
     seen = set()
@@ -72,6 +76,12 @@ def count_unique_runs(p: Path) -> int:
             ri = row.get("run_index") or row.get("run")
             if tid is None or ri is None:
                 continue
+            if only_run is not None:
+                try:
+                    if int(ri) != only_run:
+                        continue
+                except (ValueError, TypeError):
+                    continue
             seen.add((tid, ri))
     return len(seen)
 
@@ -84,8 +94,8 @@ def _dataset_row_count(p: Path) -> int | None:
         return sum(1 for _ in f) - 1
 
 
-def expected_runs(cfg_data, root: Path):
-    rpt = get_path(cfg_data, "dataset", "runs_per_target", default=1) or 1
+def expected_runs(cfg_data, root: Path, only_run: int | None = None):
+    rpt = 1 if only_run is not None else (get_path(cfg_data, "dataset", "runs_per_target", default=1) or 1)
     csv_path = get_path(cfg_data, "dataset", "csv_path")
     num_targets = get_path(cfg_data, "dataset", "num_targets")
     if not csv_path:
@@ -99,7 +109,7 @@ def expected_runs(cfg_data, root: Path):
     return n * rpt
 
 
-def audit(root: Path, include_ont: bool = False):
+def audit(root: Path, include_ont: bool = False, only_run: int | None = None):
     """Audit configs vs runs.csv on disk.
 
     When ``include_ont`` is True, also looks for ``<exp>_ont/runs.csv`` (data
@@ -107,6 +117,10 @@ def audit(root: Path, include_ont: bool = False):
     and reports both ``actual`` (canonical) and ``ont_actual`` columns. The
     ``status`` / ``pct`` columns then reflect the **best of canonical vs ont**
     (effectively counting _ont data as valid).
+
+    When ``only_run`` is set (e.g. ``1``), only rows with that run_index are
+    counted, and ``expected`` is set to ``num_targets × 1`` regardless of
+    ``runs_per_target`` in the YAML.
     """
     cfg_root = root / "configs" / "full"
     out_root = root / "outputs" / "models"
@@ -130,15 +144,15 @@ def audit(root: Path, include_ont: bool = False):
             rows.append(row)
             continue
         seeker, oracle, pruner, triple, exp_name, runs_csv = find_runs_csv(data, out_root)
-        actual = count_unique_runs(runs_csv) if runs_csv else 0
-        exp_total = expected_runs(data, root) or 0
+        actual = count_unique_runs(runs_csv, only_run=only_run) if runs_csv else 0
+        exp_total = expected_runs(data, root, only_run=only_run) or 0
 
         ont_actual = 0
         ont_runs_csv = None
         if include_ont and exp_name:
             ont_csv = out_root / triple / f"{exp_name}_ont" / "runs.csv"
             if ont_csv.exists():
-                ont_actual = count_unique_runs(ont_csv)
+                ont_actual = count_unique_runs(ont_csv, only_run=only_run)
                 ont_runs_csv = ont_csv
 
         effective = max(actual, ont_actual) if include_ont else actual
@@ -232,17 +246,24 @@ def main():
     p.add_argument("--no-csv", action="store_true", help="Skip CSV writing — only print summary.")
     p.add_argument("--include-ont", action="store_true",
                    help="Treat <exp>_ont/runs.csv as valid fallback data (status uses max of canonical vs ont).")
+    p.add_argument("--only-run", type=int, default=None, metavar="N",
+                   help="Only count rows with run_index==N (e.g. --only-run 1). "
+                        "Expected is set to num_targets×1 regardless of runs_per_target.")
     args = p.parse_args()
 
     if args.root is None:
         args.root = Path(__file__).resolve().parent.parent
 
-    rows = audit(args.root, include_ont=args.include_ont)
+    rows = audit(args.root, include_ont=args.include_ont, only_run=args.only_run)
     print_summary(rows, include_ont=args.include_ont)
     if not args.no_csv:
+        suffix = ""
+        if args.only_run is not None:
+            suffix += f"_run{args.only_run:02d}"
+        if args.include_ont:
+            suffix += "_with_ont"
         out_csv = args.csv or (
-            args.root / "outputs"
-            / ("configs_progress_with_ont.csv" if args.include_ont else "configs_progress.csv")
+            args.root / "outputs" / f"configs_progress{suffix}.csv"
         )
         write_csv(rows, out_csv)
 
