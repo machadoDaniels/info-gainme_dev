@@ -10,7 +10,6 @@ models:
     extra_body:
       chat_template_kwargs:
         enable_thinking: true
-    use_reasoning: true
 
   oracle:
     model: "Nemotron-Cascade-8B"
