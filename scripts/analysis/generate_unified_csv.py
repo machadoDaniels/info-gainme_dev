@@ -2,10 +2,13 @@
 
 Usage:
     # Varre ./outputs e salva em ./outputs/unified_experiments.csv
-    python scripts/generate_unified_csv.py
+    python scripts/analysis/generate_unified_csv.py
+
+    # Filtrar apenas run_index=1 (lê summary_run01.json, salva unified_experiments_run01.csv)
+    python scripts/analysis/generate_unified_csv.py --only-run 1
 
     # Informar diretório base de outputs e caminho de saída
-    python scripts/generate_unified_csv.py [base_outputs_dir] [output_csv_path]
+    python scripts/analysis/generate_unified_csv.py --base-dir path/to/outputs --output path/to/out.csv
 
 Colunas geradas:
     Experimento, Dataset, Seeker Model, Oracle Model, Pruner Model, Observabilidade, Total Runs, Win Rate,
@@ -19,6 +22,7 @@ id: `s_<seeker>__o_<oracle>__p_<pruner>__<observabilidade>__<experimento>` (mesm
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import sys
@@ -147,30 +151,39 @@ def _extract_from_runs_csv(runs_csv: Path) -> dict | None:
         return None
 
 
-def _iter_experiments(base_outputs_dir: Path) -> list[dict]:
-    """Percorre o diretório base e coleta linhas para o CSV unificado."""
+def _iter_experiments(base_outputs_dir: Path, only_run: int | None = None) -> list[dict]:
+    """Percorre o diretório base e coleta linhas para o CSV unificado.
+
+    Args:
+        base_outputs_dir: Diretório raiz de outputs.
+        only_run: Se definido, lê ``summary_runNN.json`` em vez de ``summary.json``.
+                  Pastas sem o arquivo filtrado são puladas (não há fallback para runs.csv
+                  quando only_run está ativo, pois o CSV filtrado ainda não foi gerado).
+    """
     rows: list[dict] = []
-    # Preferir summary.json quando disponível
-    for summary_path in sorted(base_outputs_dir.rglob("summary.json")):
+    summary_filename = f"summary_run{only_run:02d}.json" if only_run is not None else "summary.json"
+
+    # Preferir summary(_runNN).json quando disponível
+    for summary_path in sorted(base_outputs_dir.rglob(summary_filename)):
         row = _extract_from_summary(summary_path)
         if row:
             row["id"] = _compose_experiment_id(row)
             rows.append(row)
 
-    # Para pastas sem summary.json, tentar via runs.csv
-    seen_ids = {r["id"] for r in rows}
-    for runs_csv in sorted(base_outputs_dir.rglob("runs.csv")):
-        # Se existe summary no mesmo dir, já capturado
-        if (runs_csv.parent / "summary.json").exists():
-            continue
-        row = _extract_from_runs_csv(runs_csv)
-        if not row:
-            continue
-        row["id"] = _compose_experiment_id(row)
-        if row["id"] in seen_ids:
-            continue
-        rows.append(row)
-        seen_ids.add(row["id"])
+    # Para pastas sem summary, tentar via runs.csv — apenas no modo padrão (sem only_run)
+    if only_run is None:
+        seen_ids = {r["id"] for r in rows}
+        for runs_csv in sorted(base_outputs_dir.rglob("runs.csv")):
+            if (runs_csv.parent / "summary.json").exists():
+                continue
+            row = _extract_from_runs_csv(runs_csv)
+            if not row:
+                continue
+            row["id"] = _compose_experiment_id(row)
+            if row["id"] in seen_ids:
+                continue
+            rows.append(row)
+            seen_ids.add(row["id"])
 
     return rows
 
@@ -179,29 +192,58 @@ def main() -> int:
     """Ponto de entrada para geração do CSV unificado."""
     repo_root = Path(__file__).parent.parent.parent
     default_base = repo_root / "outputs"
-    default_out = default_base / "unified_experiments.csv"
 
-    # Argumentos opcionais
-    if len(sys.argv) >= 2:
-        base_outputs_dir = Path(sys.argv[1])
-    else:
-        base_outputs_dir = default_base
+    parser = argparse.ArgumentParser(
+        description="Gera CSV unificado com métricas de todos os experimentos.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Exemplos:
+  python scripts/analysis/generate_unified_csv.py
+  python scripts/analysis/generate_unified_csv.py --only-run 1
+  python scripts/analysis/generate_unified_csv.py --base-dir outputs/ --output out.csv
+        """,
+    )
+    parser.add_argument(
+        "--base-dir",
+        default=None,
+        help="Diretório base de outputs (default: outputs/).",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Caminho do CSV de saída (default: outputs/unified_experiments[_runNN].csv).",
+    )
+    parser.add_argument(
+        "--only-run",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Lê summary_runNN.json em vez de summary.json. "
+            "Salva em unified_experiments_runNN.csv."
+        ),
+    )
 
-    if len(sys.argv) >= 3:
-        output_csv = Path(sys.argv[2])
-    else:
-        output_csv = default_out
+    args = parser.parse_args()
+    only_run: int | None = args.only_run
+
+    base_outputs_dir = Path(args.base_dir) if args.base_dir else default_base
+
+    run_suffix = f"_run{only_run:02d}" if only_run is not None else ""
+    default_out = base_outputs_dir / f"unified_experiments{run_suffix}.csv"
+    output_csv = Path(args.output) if args.output else default_out
 
     if not base_outputs_dir.exists():
         print(f"❌ Diretório de outputs não encontrado: {base_outputs_dir}")
-        print(f"Usage: python {Path(__file__).name} [base_outputs_dir] [output_csv]")
         return 1
 
+    summary_name = f"summary_run{only_run:02d}.json" if only_run is not None else "summary.json"
     print(f"🔎 Lendo experimentos em: {base_outputs_dir}")
-    rows = _iter_experiments(base_outputs_dir)
+    print(f"📄 Fonte: {summary_name}")
+    rows = _iter_experiments(base_outputs_dir, only_run=only_run)
 
     if not rows:
-        print("❌ Nenhum experimento encontrado (summary.json ou runs.csv)")
+        print(f"❌ Nenhum experimento encontrado ({summary_name} ou runs.csv)")
         return 1
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
