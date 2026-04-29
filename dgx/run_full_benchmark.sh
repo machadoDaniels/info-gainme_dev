@@ -114,7 +114,7 @@ fi
 
 
 export VLLM_LOGGING_LEVEL=DEBUG
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-1800}"
+export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 export HF_HOME=/workspace/hf-cache
 source /raid/user_danielpedrozo/projects/info-gainme_dev/.env
 export HF_TOKEN="${HF_TOKEN:?HF_TOKEN não definido no .env}"
