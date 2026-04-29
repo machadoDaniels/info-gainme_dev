@@ -133,7 +133,11 @@ echo "=========================================="
 echo "Info Gainme Full Benchmark - $(date)"
 echo "GPUs allocated: ${TOTAL_GPUS} (CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES})"
 echo "Seeker:  ${MODEL1_NAME} on GPU ${MODEL1_GPU} (port ${MODEL1_PORT})"
-echo "Oracle:  ${MODEL2_NAME} on GPU ${MODEL2_GPU} (port ${MODEL2_PORT})"
+if [ "${MODE}" = "seeker_only" ]; then
+    echo "Oracle:  ${MODEL2_NAME} (external, via servers.yaml)"
+else
+    echo "Oracle:  ${MODEL2_NAME} on GPU ${MODEL2_GPU} (port ${MODEL2_PORT})"
+fi
 echo "Configs: ${CONFIGS_TARGET}"
 echo "=========================================="
 echo ""
@@ -208,14 +212,14 @@ wait_vllm_ready() {
 }
 
 PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL1_NAME}.log" "${MODEL1_REASONING_PARSER}")
-wait_vllm_ready ${PID1} ${MODEL1_PORT} "${MODEL1_NAME}" "${VLLM_READY_TIMEOUT:-1800}"
+wait_vllm_ready ${PID1} ${MODEL1_PORT} "${MODEL1_NAME}" "${VLLM_ENGINE_READY_TIMEOUT_S}"
 echo ""
 
 # Start second model only in dual mode
 PID2=""
 if [ "${MODE}" = "dual" ]; then
     PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL2_NAME}.log" "${MODEL2_REASONING_PARSER}")
-    wait_vllm_ready ${PID2} ${MODEL2_PORT} "${MODEL2_NAME}" "${VLLM_READY_TIMEOUT:-1800}"
+    wait_vllm_ready ${PID2} ${MODEL2_PORT} "${MODEL2_NAME}" "${VLLM_ENGINE_READY_TIMEOUT_S}"
     echo ""
 elif [ "${MODE}" = "single" ]; then
     # Single mode: use MODEL1 for all agents
@@ -224,7 +228,6 @@ elif [ "${MODE}" = "single" ]; then
     echo "(Single mode: using ${MODEL1_NAME} for all agents)"
     echo ""
 else
-    # seeker_only: MODEL2 served externally via servers.yaml — don't start a local vLLM
     echo "(Seeker-only: oracle/pruner endpoint resolved from servers.yaml for ${MODEL2_NAME})"
     echo ""
 fi
@@ -239,14 +242,7 @@ servers:
   ${MODEL1_NAME}: http://${NODE_IP}:${MODEL1_PORT}/v1
   ${MODEL2_NAME}: http://${NODE_IP}:${MODEL2_PORT}/v1
 EOF
-elif [ "${MODE}" = "seeker_only" ]; then
-    # Only override the seeker; oracle/pruner (MODEL2) resolved from servers.yaml
-    cat > "${SERVERS_OVERRIDE}" <<EOF
-servers:
-  ${MODEL1_NAME}: http://${NODE_IP}:${MODEL1_PORT}/v1
-EOF
 else
-    # Single mode: only one server, write MODEL1_NAME only to avoid duplicate key
     cat > "${SERVERS_OVERRIDE}" <<EOF
 servers:
   ${MODEL1_NAME}: http://${NODE_IP}:${MODEL1_PORT}/v1
