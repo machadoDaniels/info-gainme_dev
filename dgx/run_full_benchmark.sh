@@ -118,7 +118,10 @@ else
     echo "Mode: MANUAL = ${MODE}"
 fi
 
-# Assign GPUs based on mode
+# Assign GPUs based on mode. MODEL1_TP / MODEL2_TP control --tensor-parallel-size
+# inside vLLM (default 1; seeker_only spreads all allocated GPUs across the seeker).
+MODEL1_TP=1
+MODEL2_TP=1
 if [ "${MODE}" = "single" ]; then
     MODEL1_GPU=${GPU_ARRAY[0]}
     MODEL2_GPU=${GPU_ARRAY[0]}  # Same GPU
@@ -132,8 +135,9 @@ elif [ "${MODE}" = "dual" ]; then
     MODEL2_GPU=${GPU_ARRAY[1]}
     echo "  → Dual model: seeker on GPU ${MODEL1_GPU}, oracle/pruner on GPU ${MODEL2_GPU}"
 elif [ "${MODE}" = "seeker_only" ]; then
-    MODEL1_GPU=${GPU_ARRAY[0]}
-    echo "  → Seeker-only: seeker on GPU ${MODEL1_GPU}, oracle/pruner from servers.yaml (${MODEL2_NAME})"
+    MODEL1_GPU=$(IFS=,; echo "${GPU_ARRAY[*]}")  # all allocated GPUs
+    MODEL1_TP=${TOTAL_GPUS}
+    echo "  → Seeker-only: seeker on GPUs ${MODEL1_GPU} (TP=${MODEL1_TP}), oracle/pruner from servers.yaml (${MODEL2_NAME})"
 else
     echo "ERROR: MODE must be 'single', 'dual', or 'seeker_only', got: ${MODE}"
     exit 1
@@ -185,10 +189,10 @@ echo "  max_num_seqs=${VLLM_MAX_NUM_SEQS} | enforce_eager=${VLLM_ENFORCE_EAGER} 
 echo ""
 
 start_vllm_server() {
-    local model=$1 name=$2 port=$3 gpu=$4 gpu_mem=$5 max_len=$6 log=$7 parser=${8:-""}
-    echo "Starting ${name} (GPU ${gpu}:${port})..." >&2
+    local model=$1 name=$2 port=$3 gpu=$4 gpu_mem=$5 max_len=$6 log=$7 parser=${8:-""} tp=${9:-1}
+    echo "Starting ${name} (GPU ${gpu}:${port}, TP=${tp})..." >&2
 
-    local cmd="/usr/bin/python3 -m vllm.entrypoints.openai.api_server --model ${model} --served-model-name ${name} --download-dir /workspace/hf-cache/hub --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-model-len ${max_len}"
+    local cmd="/usr/bin/python3 -m vllm.entrypoints.openai.api_server --model ${model} --served-model-name ${name} --download-dir /workspace/hf-cache/hub --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-model-len ${max_len} --tensor-parallel-size ${tp}"
     [ "${VLLM_ENFORCE_EAGER}" = "true" ] && cmd="${cmd} --enforce-eager"
     [ -n "${parser}" ] && cmd="${cmd} --reasoning-parser ${parser}"
 
@@ -236,14 +240,14 @@ wait_vllm_ready() {
     echo "✓ ${name} ready after ${elapsed}s"
 }
 
-PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL1_NAME}.log" "${MODEL1_REASONING_PARSER}")
+PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL1_NAME}.log" "${MODEL1_REASONING_PARSER}" "${MODEL1_TP}")
 wait_vllm_ready ${PID1} ${MODEL1_PORT} "${MODEL1_NAME}" "${VLLM_ENGINE_READY_TIMEOUT_S}"
 echo ""
 
 # Start second model only in dual mode
 PID2=""
 if [ "${MODE}" = "dual" ]; then
-    PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL2_NAME}.log" "${MODEL2_REASONING_PARSER}")
+    PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL2_NAME}.log" "${MODEL2_REASONING_PARSER}" "${MODEL2_TP}")
     wait_vllm_ready ${PID2} ${MODEL2_PORT} "${MODEL2_NAME}" "${VLLM_ENGINE_READY_TIMEOUT_S}"
     echo ""
 elif [ "${MODE}" = "single" ]; then
