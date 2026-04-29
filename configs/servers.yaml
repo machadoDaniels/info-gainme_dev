@@ -76,3 +76,15 @@ hf_paths:
   Qwen3-30B-A3B-Thinking-2507: "Qwen/Qwen3-30B-A3B-Thinking-2507"
   Qwen3-30B-A3B-Instruct-2507: "Qwen/Qwen3-30B-A3B-Instruct-2507"
   Qwen/Qwen3-235B-A22B-Instruct-2507-FP8: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8"
+
+  # AllenAI Olmo
+  Olmo-3-7B-Think: "allenai/Olmo-3-7B-Think"
+  Olmo-3-7B-Instruct: "allenai/Olmo-3-7B-Instruct"
+  Olmo-3.1-32B-Think: "allenai/Olmo-3.1-32B-Think"
+  Olmo-3.1-32B-Instruct: "allenai/Olmo-3.1-32B-Instruct"
+
+  # Microsoft Phi
+  Phi-4-reasoning: "microsoft/Phi-4-reasoning"
+  Phi-4-mini-reasoning: "microsoft/Phi-4-mini-reasoning"
+  phi-4: "microsoft/phi-4"
+  Phi-4-mini-instruct: "microsoft/Phi-4-mini-instruct"

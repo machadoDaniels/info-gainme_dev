@@ -32,6 +32,31 @@ done
 export MODEL1_PORT="${MODEL1_PORT:-$DEFAULT_MODEL1_PORT}"
 export MODEL2_PORT="${MODEL2_PORT:-$DEFAULT_MODEL2_PORT}"
 
+# Look up HF repo id from configs/servers.yaml hf_paths.<served-model-name>.
+# Lets users pass only MODEL1_NAME / MODEL2_NAME and have the script resolve
+# the HF download path automatically.
+lookup_hf_path() {
+    python3 -c "
+import yaml, sys
+try:
+    with open('/raid/user_danielpedrozo/projects/info-gainme_dev/configs/servers.yaml') as f:
+        data = yaml.safe_load(f) or {}
+    print((data.get('hf_paths') or {}).get('$1', ''))
+except Exception:
+    pass
+" 2>/dev/null
+}
+
+# Resolve MODEL1 from hf_paths if only MODEL1_NAME was given
+if [ -z "${MODEL1+x}" ] && [ -n "${MODEL1_NAME+x}" ]; then
+    resolved=$(lookup_hf_path "${MODEL1_NAME}")
+    [ -n "${resolved}" ] && MODEL1="${resolved}" && echo "Resolved MODEL1=${MODEL1} from hf_paths.${MODEL1_NAME}"
+fi
+if [ -z "${MODEL2+x}" ] && [ -n "${MODEL2_NAME+x}" ]; then
+    resolved=$(lookup_hf_path "${MODEL2_NAME}")
+    [ -n "${resolved}" ] && MODEL2="${resolved}" && echo "Resolved MODEL2=${MODEL2} from hf_paths.${MODEL2_NAME}"
+fi
+
 export MODEL1="${MODEL1:-Qwen/Qwen3-4B-Thinking-2507}"
 export MODEL1_NAME="${MODEL1_NAME:-Qwen3-4B-Thinking-2507}"
 export MODEL1_GPU_MEM="${MODEL1_GPU_MEM:-0.90}"
