@@ -11,10 +11,16 @@ models:
   oracle:
     model: "Qwen3-8B"
     timeout: 120.0
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
 
   pruner:
     model: "Qwen3-8B"
     timeout: 120.0
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: true
 
 game:
   observability_mode: "PARTIALLY_OBSERVABLE"

@@ -28,7 +28,7 @@ fi
 if [[ -f "${TARGET}" ]]; then
     CONFIGS=("${TARGET}")
 elif [[ -d "${TARGET}" ]]; then
-    mapfile -t CONFIGS < <(find "${TARGET}" -maxdepth 1 -name "*.yaml" | sort)
+    mapfile -t CONFIGS < <(find "${TARGET}" -name "*.yaml" | sort)
 else
     echo "ERRO: '${TARGET}' não é um arquivo nem pasta válida."
     exit 1
