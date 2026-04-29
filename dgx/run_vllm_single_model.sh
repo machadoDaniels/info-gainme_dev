@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=akcit-rl-vllm-single-model
-#SBATCH --partition=b200n1
-#SBATCH --gres=gpu:2
-#SBATCH --mem=30G
-#SBATCH --time=4-00:00:00
-#SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.out
+#SBATCH --job-name=vllm-info-gainme
+#SBATCH --partition=h100n3
+#SBATCH --gres=gpu:1
+#SBATCH --mem=16G
+#SBATCH --time=15-00:00:00
+#SBATCH --output=/raid/user_danielpedrozo/projects/info-gainme_dev/logs/%x-%j.log
 
 # porta do servidor (interna ao nó)
-export VLLM_PORT=8029
+export VLLM_PORT=8088
 # Configuração do modelo
 # export MODEL="Qwen/Qwen3-30B-A3B-Thinking-2507"
 # export MODEL_NAME="Qwen3-30B-A3B-Thinking-2507"
@@ -18,9 +18,10 @@ export VLLM_PORT=8029
 
 export MODEL="Qwen/Qwen3-8B"
 export MODEL_NAME="Qwen3-8B"
-export MODEL_GPU_MEM=0.9
-export MODEL_REASONING_PARSER=""           
-export MODEL_MAX_LEN=32000     
+export MODEL_GPU_MEM=0.95
+export MODEL_REASONING_PARSER="qwen3"
+export MODEL_MAX_LEN=32000
+export MODEL_MAX_NUM_SEQS=128
 
 
 # export MODEL="Qwen/Qwen3-8B"
@@ -32,13 +33,24 @@ export MODEL_MAX_LEN=32000
 
 
 # variáveis de ambiente para vLLM
-export VLLM_LOGGING_LEVEL=DEBUG
+export VLLM_LOGGING_LEVEL=INFO
+# CPU paralelismo (elimina warning "Reducing Torch parallelism from 2 to 1")
+export OMP_NUM_THREADS=8
+# Reduz fragmentacao do alocador CUDA do PyTorch
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# NCCL: NVLink P2P entre as 2 H100 (critico para TP=2 ser rapido)
+export NCCL_P2P_DISABLE=0
+export NCCL_IB_DISABLE=1
 # Especificar GPU específica (descomente uma das linhas abaixo)
-# export CUDA_VISIBLE_DEVICES=5,1
+export CUDA_VISIBLE_DEVICES=4,5
 
 
 echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
 echo "SLURM_GPUS_ON_NODE: ${SLURM_GPUS_ON_NODE}"
+
+export NUM_GPUS=2
+
+echo "NUM_GPUS: ${NUM_GPUS}"
 
 # cache do HF no /workspace para evitar problemas de permissão no /raid
 export HF_HOME=/workspace/hf-cache
@@ -83,10 +95,12 @@ vllm_cmd="/usr/bin/python3 -m vllm.entrypoints.openai.api_server \
   --port ${VLLM_PORT} \
   --host 0.0.0.0 \
   --gpu-memory-utilization ${MODEL_GPU_MEM} \
-  --max-num-seqs 16 \
-  --tensor-parallel-size ${SLURM_GPUS_ON_NODE} \
+  --max-num-seqs ${MODEL_MAX_NUM_SEQS} \
+  --max-num-batched-tokens 16384 \
+  --tensor-parallel-size ${NUM_GPUS} \
   --max-model-len ${MODEL_MAX_LEN} \
-  --enforce-eager"
+  --enable-prefix-caching \
+  --disable-log-requests"
 
 # Adicionar reasoning_parser se fornecido
 if [ -n "${MODEL_REASONING_PARSER}" ]; then
@@ -101,6 +115,10 @@ singularity exec \
      --pwd /workspace \
      --env HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN} \
      --env VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL} \
+     --env OMP_NUM_THREADS=${OMP_NUM_THREADS} \
+     --env PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF} \
+     --env NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE} \
+     --env NCCL_IB_DISABLE=${NCCL_IB_DISABLE} \
      /raid/user_danielpedrozo/images/vllm_openai_latest.sif \
      bash -c "${vllm_cmd}" &
 
