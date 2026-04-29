@@ -13,11 +13,16 @@ Requirements:
 """
 
 import argparse
+import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Suppress internal 429/retry warnings — huggingface_hub handles backoff automatically
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 from huggingface_hub import HfApi
 
@@ -72,13 +77,31 @@ def main() -> int:
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=8,
-        help="Parallel upload workers",
+        default=2,
+        help="Parallel upload workers (keep low to avoid HF rate limits)",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be uploaded without uploading",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=5,
+        help="Number of retry attempts on failure",
+    )
+    parser.add_argument(
+        "--retry-sleep",
+        type=int,
+        default=300,
+        help="Seconds to sleep between retries",
+    )
+    parser.add_argument(
+        "--report-every",
+        type=int,
+        default=600,
+        help="Seconds between progress reports (0 = disable)",
     )
 
     args = parser.parse_args()
@@ -112,20 +135,31 @@ def main() -> int:
 
     api = HfApi(token=token)
 
-    # --- upload ---
+    # --- upload with retry ---
     print(f"\nUploading {outputs_dir}/ → {repo_id} ...")
     print("Upload is resumable — safe to interrupt and re-run.\n")
-    try:
-        api.upload_large_folder(
-            folder_path=str(outputs_dir),
-            repo_id=repo_id,
-            repo_type="dataset",
-            num_workers=args.num_workers,
-            ignore_patterns=[".cache/**"],
-        )
-    except Exception as exc:
-        print(f"\nUpload failed: {exc}")
-        return 1
+
+    report_every = args.report_every if args.report_every > 0 else 999999
+
+    for attempt in range(1, args.max_retries + 1):
+        try:
+            api.upload_large_folder(
+                folder_path=str(outputs_dir),
+                repo_id=repo_id,
+                repo_type="dataset",
+                num_workers=args.num_workers,
+                ignore_patterns=[".cache/**"],
+                print_report_every=report_every,
+            )
+            break
+        except Exception as exc:
+            if attempt < args.max_retries:
+                print(f"\nUpload error (attempt {attempt}/{args.max_retries}): {exc}")
+                print(f"Retrying in {args.retry_sleep}s...")
+                time.sleep(args.retry_sleep)
+            else:
+                print(f"\nUpload failed after {args.max_retries} attempts: {exc}")
+                return 1
 
     print(f"\nDone! Dataset: https://huggingface.co/datasets/{repo_id}")
     return 0

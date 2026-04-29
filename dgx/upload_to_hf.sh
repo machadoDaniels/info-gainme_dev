@@ -36,7 +36,7 @@ sg "${SHARED_GROUP}" -c "
             pip install --quiet --user huggingface_hub python-dotenv
             python3 scripts/hf/upload_to_hf.py ${EXTRA_ARGS}
         \"
-" >> "${LOG_FILE}" 2>&1 &
+" 2>&1 | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\r/\n/g' >> "${LOG_FILE}" &
 
 echo "Rodando em background (PID $!)"
 echo "Acompanhe com: tail -f ${LOG_FILE}"
