@@ -199,8 +199,6 @@ class LLMAdapter:
         if self._config.base_url is not None:
             client_kwargs["base_url"] = self._config.base_url
 
-        client = OpenAI(**client_kwargs)
-
         request_kwargs: dict[str, Any] = {
             "model": self._config.model,
             "messages": payload_messages,
@@ -251,6 +249,7 @@ class LLMAdapter:
 
         for attempt in range(max_retries):
             try:
+                client = OpenAI(**client_kwargs)
                 completion = client.chat.completions.create(**request_kwargs)
 
                 # Build raw_content, prepending reasoning_content if present
