@@ -44,6 +44,7 @@ Set `game_over: true` ONLY when the Seeker is **guessing** the target — i.e., 
 The Seeker is NOT guessing (`game_over: false`) when:
 - They send a greeting, meta-question, or off-task message.
 - They mention the target's name as part of a list/enumeration without committing to one candidate.
+- In `FULLY_OBSERVABLE` / `INITIALLY_OBSERVABLE` modes the Seeker sees the candidate list. Weak Seekers sometimes echo or copy back the candidate list verbatim (often with `[Computer]`/`[Oracle]` markers from prior turns). The target's label will appear in such echoes — this is **NOT** a guess. Look for an explicit "Is it X?"-style commitment, not just textual presence.
 - They ask a non-yes/no question or anything that isn't a singular "Is it X?" form.
 
 If in doubt, set `game_over: false`.
