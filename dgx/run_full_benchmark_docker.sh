@@ -255,24 +255,46 @@ start_vllm_server() {
     local cname="vllm-$(sanitize_name "${name}")-${JOB_ID}"
     echo "Starting ${name} (GPU ${gpu}, port ${port}, TP=${tp})..." >&2
 
-    local cmd="--model ${model} --served-model-name ${name} --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-model-len ${max_len} --tensor-parallel-size ${tp}"
-    [ "${VLLM_ENFORCE_EAGER}" = "true" ] && cmd="${cmd} --enforce-eager"
-    [ -n "${parser}" ] && cmd="${cmd} --reasoning-parser ${parser}"
+    local vllm_args="--model ${model} --served-model-name ${name} --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-model-len ${max_len} --tensor-parallel-size ${tp}"
+    [ "${VLLM_ENFORCE_EAGER}" = "true" ] && vllm_args="${vllm_args} --enforce-eager"
+    [ -n "${parser}" ] && vllm_args="${vllm_args} --reasoning-parser ${parser}"
 
     mkdir -p "$(dirname "${log}")" 2>/dev/null || true
 
-    docker run -d \
-        --name "${cname}" \
-        --gpus all \
-        -e CUDA_VISIBLE_DEVICES="${gpu}" \
-        --ipc=host \
-        --network=host \
-        -v "${HOME}/hf-cache:/root/.cache/huggingface" \
-        -e HF_TOKEN="${HF_TOKEN}" \
-        -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL}" \
-        -e VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S}" \
-        "${VLLM_IMAGE}" \
-        ${cmd} > /dev/null 2>&1
+    # VLLM_PRE_INSTALL: space-separated pip packages to install before starting vLLM.
+    # Useful when the image's transformers is too old for a new model architecture.
+    # Example: VLLM_PRE_INSTALL="--upgrade transformers"
+    local pre_install="${VLLM_PRE_INSTALL:-}"
+    if [ -n "${pre_install}" ]; then
+        docker run -d \
+            --name "${cname}" \
+            --gpus all \
+            -e CUDA_VISIBLE_DEVICES="${gpu}" \
+            --ipc=host \
+            --network=host \
+            -v "${HOME}/hf-cache:/root/.cache/huggingface" \
+            -v "${PROJECT_DIR}/.pip-cache:/root/.cache/pip" \
+            -e HF_TOKEN="${HF_TOKEN}" \
+            -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL}" \
+            -e VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S}" \
+            --entrypoint bash \
+            "${VLLM_IMAGE}" \
+            -c "pip install --quiet ${pre_install} && python3 -m vllm.entrypoints.openai.api_server ${vllm_args}" \
+            > /dev/null 2>&1
+    else
+        docker run -d \
+            --name "${cname}" \
+            --gpus all \
+            -e CUDA_VISIBLE_DEVICES="${gpu}" \
+            --ipc=host \
+            --network=host \
+            -v "${HOME}/hf-cache:/root/.cache/huggingface" \
+            -e HF_TOKEN="${HF_TOKEN}" \
+            -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL}" \
+            -e VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S}" \
+            "${VLLM_IMAGE}" \
+            ${vllm_args} > /dev/null 2>&1
+    fi
 
     # Forward container logs to file in background
     docker logs -f "${cname}" >> "${log}" 2>&1 &
