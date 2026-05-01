@@ -117,7 +117,7 @@ def _get_jsonl_index(unified_jsonl: Path) -> Dict[str, List[Dict[str, Any]]]:
             continue
         key = record.get("seeker_path", "")
         if key:
-            index[key] = record.get("turns") or record.get("history") or []
+            index[key] = record.get("turns") or []
     _JSONL_INDEX = index
     _JSONL_INDEX_PATH = unified_jsonl
     logger.info("Loaded unified JSONL index: %d entries from %s", len(index), unified_jsonl)
@@ -125,27 +125,15 @@ def _get_jsonl_index(unified_jsonl: Path) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def _load_seeker_history(conversation_dir: Path) -> List[Dict[str, Any]]:
-    """Load synthesized reasoning turns for a conversation.
+    """Load synthesized reasoning turns for a conversation from the unified
+    ``outputs/seeker_traces.jsonl`` index, matched by seeker.json path.
 
-    Tries, in order:
-    1. Per-conversation ``seeker_traces.json`` (old pipeline, key ``"history"``)
-    2. Unified ``outputs/seeker_traces.jsonl`` (new pipeline, key ``"turns"``)
-       matched by the conversation's seeker.json path.
-
-    Returns an empty list if neither source is found.
+    Returns an empty list if the conversation is not in the index.
     """
-    # --- option 1: per-conversation file (old format) ---
-    per_conv = conversation_dir / "seeker_traces.json"
-    if per_conv.exists():
-        with per_conv.open(encoding="utf-8") as f:
-            data = json.load(f)
-        return data.get("history") or data.get("turns") or []
-
-    # --- option 2: unified JSONL (new format) with cached index ---
     project_root = Path(__file__).parent.parent.parent
     unified_jsonl = project_root / "outputs" / "seeker_traces.jsonl"
     if not unified_jsonl.exists():
-        logger.warning("No seeker_traces.json and no unified seeker_traces.jsonl for %s", conversation_dir)
+        logger.warning("Unified seeker_traces.jsonl not found at %s", unified_jsonl)
         return []
 
     index = _get_jsonl_index(unified_jsonl)
@@ -333,7 +321,8 @@ def evaluate_seeker_choices(
     READ-ONLY: never writes files (except stateless LLM API calls).
 
     Args:
-        conversation_dir: Directory containing seeker_traces.json, turns.jsonl, metadata.json.
+        conversation_dir: Directory containing turns.jsonl and metadata.json. Reasoning
+            traces are loaded from outputs/seeker_traces.jsonl (matched by seeker.json path).
         oracle_config: LLM configuration for Oracle simulation.
         pruner_config: LLM configuration for Pruner simulation.
         dataset_csv_path: Path to domain CSV. Auto-detected if None.
@@ -372,8 +361,7 @@ def evaluate_seeker_choices(
         )
         logger.warning("Target '%s' not found in pool — using metadata attrs", target_label)
 
-    # Load seeker traces — prefer per-conversation seeker_traces.json,
-    # fall back to the unified seeker_traces.jsonl index (new pipeline).
+    # Load seeker traces from the unified seeker_traces.jsonl index.
     logger.info("Loading seeker traces...")
     history = _load_seeker_history(conversation_dir)
     logger.info("Found %d turns in seeker traces", len(history))

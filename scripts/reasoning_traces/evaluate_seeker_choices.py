@@ -57,7 +57,7 @@ def main() -> int:
     parser.add_argument(
         "conversation_dir",
         type=Path,
-        help="Directory containing seeker_traces.json, turns.jsonl, metadata.json"
+        help="Directory containing turns.jsonl and metadata.json. Reasoning traces are read from outputs/seeker_traces.jsonl."
     )
     parser.add_argument(
         "--dataset-csv",

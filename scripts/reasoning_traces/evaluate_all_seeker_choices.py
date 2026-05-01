@@ -163,7 +163,7 @@ def process_single_conversation(
             }
     
     # Check if required files exist
-    # seeker_traces.json is optional — evaluator falls back to unified seeker_traces.jsonl
+    # Reasoning traces are read from outputs/seeker_traces.jsonl by the evaluator.
     required_files = ["turns.jsonl", "metadata.json"]
     missing_files = [f for f in required_files if not (conversation_dir / f).exists()]
     if missing_files:
