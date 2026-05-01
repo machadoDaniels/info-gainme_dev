@@ -19,7 +19,7 @@ servers:
   Nemotron-Cascade-8B: "http://CHANGE_ME/v1"
   Nemotron-Cascade-8B-Thinking: "http://CHANGE_ME/v1"
   Gemma-3-12B-IT: "http://CHANGE_ME/v1"
-  Gemma-3-4B-IT: "http://CHANGE_ME/v1"
+  Gemma-3-4B-IT: "http://10.100.0.112:8015/v1"
   Gemma-4-E4B: "http://CHANGE_ME/v1"
 
   # --- Judge / classifier models (compartilhados; podem dormir/sumir) ---
