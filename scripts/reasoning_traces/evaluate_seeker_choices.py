@@ -90,10 +90,11 @@ def main() -> int:
         help="API key for LLM (default: NINGUEM-TA-PURO-2K26)"
     )
     parser.add_argument(
-        "--output",
+        "--outputs-base-dir",
         type=Path,
-        default=None,
-        help="Output JSON file path (default: conversation_dir/question_evaluation.json)"
+        default=Path("outputs"),
+        help="Outputs base dir — the unified question_evaluations.jsonl lives here "
+             "(default: ./outputs)",
     )
     
     args = parser.parse_args()
@@ -152,11 +153,14 @@ def main() -> int:
         logger.error("Error evaluating choices: %s", e, exc_info=True)
         return 1
     
-    # Save results
-    output_path = args.output or (args.conversation_dir / "question_evaluation.json")
-    with output_path.open("w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
-    
+    # Append result to unified JSONL
+    from scripts.reasoning_traces.evaluate_all_seeker_choices import (
+        unified_jsonl_path, _build_record, _append_record,
+    )
+    unified_jsonl = unified_jsonl_path(args.outputs_base_dir)
+    record = _build_record(args.conversation_dir, results)
+    _append_record(unified_jsonl, record)
+
     logger.info("\n--- Evaluation Results ---")
     logger.info("✅ Optimal choices: %d / %d (%.1f%%)",
                 results["summary"]["optimal_choices"],
@@ -164,7 +168,7 @@ def main() -> int:
                 results["summary"]["optimal_choice_rate"] * 100)
     logger.info("📊 Avg chosen info gain: %.3f", results["summary"]["avg_chosen_info_gain"])
     logger.info("📊 Avg optimal info gain: %.3f", results["summary"]["avg_optimal_info_gain"])
-    logger.info("\n💾 Results saved to: %s", output_path)
+    logger.info("\n💾 Appended to: %s", unified_jsonl)
     
     return 0
 

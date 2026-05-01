@@ -11,6 +11,7 @@ import json
 import sys
 import math
 import statistics
+import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Set, Dict, Any, Optional
@@ -30,6 +31,113 @@ load_dotenv()
 logger = ClaryLogger.get_logger(__name__)
 
 _SERVERS_YAML = project_root / "configs" / "servers.yaml"
+
+# Single append-only JSONL with all per-conversation evaluation records.
+# One record per line, keyed by `seeker_path` (str of the seeker.json path).
+UNIFIED_JSONL_NAME = "question_evaluations.jsonl"
+
+_WRITE_LOCK = threading.Lock()
+
+
+def unified_jsonl_path(outputs_base_dir: Path) -> Path:
+    return outputs_base_dir / UNIFIED_JSONL_NAME
+
+
+def _seeker_path_key(conversation_dir: Path) -> str:
+    return str(conversation_dir / "seeker.json")
+
+
+def _load_done_index(unified_jsonl: Path) -> Set[str]:
+    """Return the set of seeker_path keys already in the unified JSONL."""
+    done: Set[str] = set()
+    if not unified_jsonl.exists():
+        return done
+    with unified_jsonl.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            key = rec.get("seeker_path")
+            if key:
+                done.add(key)
+    return done
+
+
+def _append_record(unified_jsonl: Path, record: Dict[str, Any]) -> None:
+    """Locked append of one JSON record (one line) to the unified JSONL."""
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    with _WRITE_LOCK:
+        unified_jsonl.parent.mkdir(parents=True, exist_ok=True)
+        with unified_jsonl.open("a", encoding="utf-8") as f:
+            f.write(line)
+
+
+def _build_record(
+    conversation_dir: Path,
+    evaluation: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Wrap an evaluation result with the keys needed for the unified JSONL."""
+    # outputs/models/<triple>/<exp>/conversations/<target>  →  experiment_dir = parent.parent
+    return {
+        "seeker_path": _seeker_path_key(conversation_dir),
+        "conversation_dir": str(conversation_dir),
+        "experiment_dir": str(conversation_dir.parent.parent),
+        **evaluation,
+    }
+
+
+def migrate_per_conv_files(
+    outputs_base_dir: Path,
+    unified_jsonl: Path,
+    done_keys: Set[str],
+) -> int:
+    """One-time migration: append legacy per-conversation question_evaluation.json
+    files into the unified JSONL. Idempotent — skips entries already in done_keys.
+    Returns number of records migrated."""
+    migrated = 0
+    for per_conv in outputs_base_dir.rglob("question_evaluation.json"):
+        seeker_key = _seeker_path_key(per_conv.parent)
+        if seeker_key in done_keys:
+            continue
+        try:
+            data = json.loads(per_conv.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning("Migration skip (parse error) %s: %s", per_conv, e)
+            continue
+        if not (data.get("turns_evaluation") and data.get("summary")):
+            continue
+        record = _build_record(per_conv.parent, data)
+        _append_record(unified_jsonl, record)
+        done_keys.add(seeker_key)
+        migrated += 1
+    if migrated > 0:
+        logger.info("📦 Migrated %d legacy per-conv files → %s", migrated, unified_jsonl)
+    return migrated
+
+
+def _load_evaluations_for_exp(
+    unified_jsonl: Path,
+    experiment_dir: Path,
+) -> List[Dict[str, Any]]:
+    """Return all evaluation records under the given experiment directory."""
+    if not unified_jsonl.exists():
+        return []
+    exp_str = str(experiment_dir)
+    records: List[Dict[str, Any]] = []
+    with unified_jsonl.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("experiment_dir") == exp_str:
+                records.append(rec)
+    return records
 
 
 def _load_servers() -> Dict[str, str]:
@@ -88,81 +196,30 @@ def find_conversation_dirs_from_runs_csv(
     return sorted(list(conversation_dirs))
 
 
-def load_evaluation_data(conversation_dir: Path) -> Optional[Dict[str, Any]]:
-    """Load evaluation data from question_evaluation.json if it exists.
-    
-    Args:
-        conversation_dir: Path to conversation directory.
-        
-    Returns:
-        Evaluation data dictionary or None if file doesn't exist or is invalid.
-    """
-    output_path = conversation_dir / "question_evaluation.json"
-    if not output_path.exists():
-        return None
-    
-    try:
-        with output_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Check if file is valid
-            if (data.get("turns_evaluation") and 
-                len(data.get("turns_evaluation", [])) > 0 and
-                data.get("summary")):
-                # Calculate missing fields for old files
-                summary = data.get("summary", {})
-                turns_evaluation = data.get("turns_evaluation", [])
-                
-                # Calculate avg_questions_considered_per_turn if missing
-                if "avg_questions_considered_per_turn" not in summary:
-                    valid_turns_considered = [t.get("total_considered") for t in turns_evaluation 
-                                             if "error" not in t and t.get("total_considered") is not None]
-                    summary["avg_questions_considered_per_turn"] = (
-                        sum(valid_turns_considered) / len(valid_turns_considered) 
-                        if valid_turns_considered else 0.0
-                    )
-                
-                # Calculate total_connection_errors if missing
-                if "total_connection_errors" not in summary:
-                    connection_errors = 0
-                    for turn_eval in turns_evaluation:
-                        if "error" not in turn_eval:
-                            questions_eval = turn_eval.get("questions_evaluation", [])
-                            for q_eval in questions_eval:
-                                error_msg = q_eval.get("error", "")
-                                if error_msg and ("Connection error" in error_msg or "Connection" in error_msg.lower()):
-                                    connection_errors += 1
-                    summary["total_connection_errors"] = connection_errors
-                
-                return data
-    except (json.JSONDecodeError, Exception) as e:
-        logger.debug("Failed to load evaluation data from %s: %s", output_path, e)
-    
-    return None
-
-
 def process_single_conversation(
     conversation_dir: Path,
     oracle_config: LLMConfig,
     pruner_config: LLMConfig,
+    unified_jsonl: Path,
+    done_keys: Set[str],
     force: bool = False,
     dataset_csv_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Process a single conversation directory."""
-    output_path = conversation_dir / "question_evaluation.json"
-    
-    # Check if file exists and is valid (not empty/incomplete)
-    if output_path.exists() and not force:
-        evaluation_data = load_evaluation_data(conversation_dir)
-        if evaluation_data:
-            return {
-                "status": "skipped",
-                "conversation_dir": str(conversation_dir),
-                "output_path": str(output_path),
-                "reason": "already exists and valid",
-                "evaluation_data": evaluation_data
-            }
-    
-    # Check if required files exist
+    """Process a single conversation directory.
+
+    Skip-check is by `seeker_path` membership in `done_keys` (built from the
+    unified JSONL). New successful evaluations are appended to `unified_jsonl`.
+    """
+    seeker_key = _seeker_path_key(conversation_dir)
+
+    if not force and seeker_key in done_keys:
+        return {
+            "status": "skipped",
+            "conversation_dir": str(conversation_dir),
+            "seeker_path": seeker_key,
+            "reason": "already in unified JSONL",
+        }
+
     # Reasoning traces are read from outputs/seeker_traces.jsonl by the evaluator.
     required_files = ["turns.jsonl", "metadata.json"]
     missing_files = [f for f in required_files if not (conversation_dir / f).exists()]
@@ -170,10 +227,10 @@ def process_single_conversation(
         return {
             "status": "error",
             "conversation_dir": str(conversation_dir),
-            "output_path": str(output_path),
-            "reason": f"Missing required files: {', '.join(missing_files)}"
+            "seeker_path": seeker_key,
+            "reason": f"Missing required files: {', '.join(missing_files)}",
         }
-    
+
     try:
         results = evaluate_seeker_choices(
             conversation_dir,
@@ -181,53 +238,45 @@ def process_single_conversation(
             pruner_config,
             dataset_csv_path=dataset_csv_path,
         )
-        
-        # Save results
-        with output_path.open("w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-        
+        record = _build_record(conversation_dir, results)
+        _append_record(unified_jsonl, record)
+        done_keys.add(seeker_key)
         return {
             "status": "success",
             "conversation_dir": str(conversation_dir),
-            "output_path": str(output_path),
-            "size_bytes": output_path.stat().st_size,
+            "seeker_path": seeker_key,
             "turns_evaluated": results["summary"]["total_turns_evaluated"],
             "optimal_choices": results["summary"]["optimal_choices"],
             "optimal_choice_rate": results["summary"]["optimal_choice_rate"],
-            "evaluation_data": results
         }
     except Exception as e:
         logger.error("Error processing %s: %s", conversation_dir, e, exc_info=True)
         return {
             "status": "error",
             "conversation_dir": str(conversation_dir),
-            "output_path": str(output_path),
-            "reason": str(e)
+            "seeker_path": seeker_key,
+            "reason": str(e),
         }
 
 
-def calculate_aggregate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Calculate aggregate statistics from all evaluation results.
-    
-    Args:
-        results: List of processing results, each containing evaluation_data if available.
-        
-    Returns:
-        Dictionary with aggregate statistics.
-    """
-    # Filter results with evaluation data
-    evaluations = []
-    for r in results:
-        if r.get("status") in ("success", "skipped") and r.get("evaluation_data"):
-            evaluations.append(r["evaluation_data"])
-    
-    success_count = sum(1 for r in results if r["status"] == "success")
-    skipped_count = sum(1 for r in results if r["status"] == "skipped")
-    error_count = sum(1 for r in results if r["status"] == "error")
+def calculate_aggregate_summary(
+    evaluations: List[Dict[str, Any]],
+    success_count: int,
+    skipped_count: int,
+    error_count: int,
+    total_conversations: int,
+) -> Dict[str, Any]:
+    """Calculate aggregate statistics from a list of evaluation records.
 
+    Args:
+        evaluations: Raw evaluation dicts (each has `summary`, `turns_evaluation`,
+            `target`). Pulled from the unified JSONL filtered by experiment.
+        success_count, skipped_count, error_count: counts from this run.
+        total_conversations: total conversations attempted in this run.
+    """
     if not evaluations:
         return {
-            "total_conversations": len(results),
+            "total_conversations": total_conversations,
             "total_evaluated": success_count + skipped_count,
             "total_success": success_count,
             "total_skipped": skipped_count,
@@ -370,7 +419,7 @@ def calculate_aggregate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]
     se_questions_considered_per_turn = std_questions_considered_per_turn / math.sqrt(len(target_questions)) if std_questions_considered_per_turn is not None and target_questions and len(target_questions) > 1 else None
     
     return {
-        "total_conversations": len(results),
+        "total_conversations": total_conversations,
         "total_evaluated": success_count + skipped_count,
         "total_success": success_count,
         "total_skipped": skipped_count,
@@ -410,6 +459,8 @@ def run_for_csv(
     outputs_base_dir: Path,
     oracle_config: LLMConfig,
     pruner_config: LLMConfig,
+    unified_jsonl: Path,
+    done_keys: Set[str],
     max_workers: int,
     force: bool,
     dry_run: bool,
@@ -430,17 +481,8 @@ def run_for_csv(
 
     if dry_run:
         for i, conv_dir in enumerate(conversation_dirs, 1):
-            output_path = conv_dir / "question_evaluation.json"
-            status = "Process"
-            if output_path.exists():
-                try:
-                    data = json.load(output_path.open())
-                    if data.get("turns_evaluation") and data.get("summary"):
-                        status = "Skip (exists and valid)"
-                    else:
-                        status = "Process (exists but invalid)"
-                except Exception:
-                    status = "Process (exists but corrupted)"
+            seeker_key = _seeker_path_key(conv_dir)
+            status = "Skip (in unified JSONL)" if seeker_key in done_keys else "Process"
             logger.info("[%d/%d] %s: %s", i, len(conversation_dirs), status, conv_dir)
         return 0
 
@@ -450,7 +492,8 @@ def run_for_csv(
             futures = {
                 executor.submit(
                     process_single_conversation,
-                    conv_dir, oracle_config, pruner_config, force, dataset_csv,
+                    conv_dir, oracle_config, pruner_config,
+                    unified_jsonl, done_keys, force, dataset_csv,
                 ): conv_dir
                 for conv_dir in conversation_dirs
             }
@@ -466,21 +509,30 @@ def run_for_csv(
         except ImportError:
             def _tqdm(x, **kw): return x
         for conv_dir in _tqdm(conversation_dirs, desc="Evaluating", unit="conv"):
-            result = process_single_conversation(conv_dir, oracle_config, pruner_config, force, dataset_csv)
+            result = process_single_conversation(
+                conv_dir, oracle_config, pruner_config,
+                unified_jsonl, done_keys, force, dataset_csv,
+            )
             results.append(result)
 
-    aggregate_summary = calculate_aggregate_summary(results)
+    success_count = sum(1 for r in results if r["status"] == "success")
+    skipped_count = sum(1 for r in results if r["status"] == "skipped")
+    error_count = sum(1 for r in results if r["status"] == "error")
+
+    # Aggregate from the unified JSONL filtered by this experiment.
+    evaluations = _load_evaluations_for_exp(unified_jsonl, runs_csv_path.parent)
+    aggregate_summary = calculate_aggregate_summary(
+        evaluations, success_count, skipped_count, error_count, len(conversation_dirs),
+    )
     logger.info("  ✅ %d ok | ⏭️  %d skip | ❌ %d err",
-                aggregate_summary["total_success"],
-                aggregate_summary["total_skipped"],
-                aggregate_summary["total_errors"])
+                success_count, skipped_count, error_count)
 
     summary_path = runs_csv_path.parent / "question_evaluations_summary.json"
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump(aggregate_summary, f, indent=2, ensure_ascii=False)
     logger.info("💾 Summary → %s", summary_path)
 
-    return 1 if aggregate_summary["total_errors"] > 0 else 0
+    return 1 if error_count > 0 else 0
 
 
 def main():
@@ -545,7 +597,14 @@ def main():
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing question_evaluation.json files, even if valid"
+        help="Re-evaluate conversations even if already in the unified JSONL "
+             "(new records are appended; the old line is left in place)"
+    )
+    parser.add_argument(
+        "--no-migrate",
+        action="store_true",
+        help="Skip the one-time migration of legacy per-conversation "
+             "question_evaluation.json files into the unified JSONL.",
     )
     parser.add_argument(
         "--max-workers",
@@ -578,14 +637,23 @@ def main():
         base_url=pruner_base_url, temperature=args.temperature,
     )
 
+    unified_jsonl = unified_jsonl_path(args.outputs_base_dir)
+    done_keys = _load_done_index(unified_jsonl)
+    logger.info("📚 Unified JSONL: %s (%d already evaluated)", unified_jsonl, len(done_keys))
+    if not args.no_migrate:
+        migrate_per_conv_files(args.outputs_base_dir, unified_jsonl, done_keys)
+
     if args.all:
         runs_csvs = find_cot_runs_csvs(args.outputs_base_dir)
         logger.info("🔎 %d CoT runs.csv found under %s", len(runs_csvs), args.outputs_base_dir)
         any_error = False
         for i, runs_csv in enumerate(runs_csvs, 1):
             logger.info("\n[%d/%d] %s", i, len(runs_csvs), runs_csv.parent.name)
-            rc = run_for_csv(runs_csv, args.outputs_base_dir, oracle_config, pruner_config,
-                             args.max_workers, args.force, args.dry_run, args.dataset_csv)
+            rc = run_for_csv(
+                runs_csv, args.outputs_base_dir, oracle_config, pruner_config,
+                unified_jsonl, done_keys,
+                args.max_workers, args.force, args.dry_run, args.dataset_csv,
+            )
             if rc != 0:
                 any_error = True
         return 1 if any_error else 0
@@ -595,6 +663,7 @@ def main():
             return 1
         return run_for_csv(
             args.runs_csv_path, args.outputs_base_dir, oracle_config, pruner_config,
+            unified_jsonl, done_keys,
             args.max_workers, args.force, args.dry_run, args.dataset_csv,
         )
 
