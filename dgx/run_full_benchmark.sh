@@ -197,17 +197,7 @@ start_vllm_server() {
     local model=$1 name=$2 port=$3 gpu=$4 gpu_mem=$5 max_len=$6 log=$7 parser=${8:-""} tp=${9:-1}
     echo "Starting ${name} (GPU ${gpu}:${port}, TP=${tp})..." >&2
 
-    # Gemma-4 architecture (model_type=gemma4) was only added in transformers 5.x.
-    # vLLM 0.16's pip metadata says transformers<5, but that's a non-fatal pip
-    # warning — runtime works fine with 5.7.0. Override via VLLM_TRANSFORMERS_VERSION.
-    local pip_prefix=""
-    if [[ "${model}" == *gemma-4* ]] || [[ "${name}" == *gemma-4* ]]; then
-        local tf_version="${VLLM_TRANSFORMERS_VERSION:-5.7.0}"
-        local mc_version="${VLLM_MISTRAL_COMMON_VERSION:-1.11.1}"
-        pip_prefix="pip install --quiet --user transformers==${tf_version} mistral_common==${mc_version} && "
-    fi
-
-    local cmd="${pip_prefix}/usr/bin/python3 -m vllm.entrypoints.openai.api_server --model ${model} --served-model-name ${name} --download-dir /workspace/hf-cache/hub --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-num-batched-tokens ${VLLM_MAX_NUM_BATCHED_TOKENS} --max-model-len ${max_len} --tensor-parallel-size ${tp} --enable-prefix-caching --disable-log-requests"
+    local cmd="/usr/bin/python3 -m vllm.entrypoints.openai.api_server --model ${model} --served-model-name ${name} --download-dir /workspace/hf-cache/hub --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-num-batched-tokens ${VLLM_MAX_NUM_BATCHED_TOKENS} --max-model-len ${max_len} --tensor-parallel-size ${tp} --enable-prefix-caching --disable-log-requests"
     [ "${VLLM_ENFORCE_EAGER}" = "true" ] && cmd="${cmd} --enforce-eager"
     [ -n "${parser}" ] && cmd="${cmd} --reasoning-parser ${parser}"
 
