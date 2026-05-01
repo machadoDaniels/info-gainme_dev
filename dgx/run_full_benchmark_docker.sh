@@ -25,8 +25,11 @@
 #   MODEL1_MAX_LEN, MODEL2_MAX_LEN  max-model-len (padrão 32000)
 #   MODEL1_REASONING_PARSER, MODEL2_REASONING_PARSER  auto-detectado por nome
 #   VLLM_MAX_NUM_SEQS     (padrão 32)
+#   VLLM_MAX_NUM_BATCHED_TOKENS  tokens em batch por step de prefill (padrão 16384)
 #   VLLM_ENFORCE_EAGER    true|false (auto por GPU: A100→true, B200→false)
 #   VLLM_ENGINE_READY_TIMEOUT_S  (padrão 1800; modelos grandes: 3600)
+#   VLLM_TRANSFORMERS_VERSION    pin transformers dentro do container (padrão 5.7.0)
+#   VLLM_MISTRAL_COMMON_VERSION  pin mistral_common (padrão 1.11.1)
 #   RUNS_PER_TARGET       sobrescreve dataset.runs_per_target do YAML
 #   VLLM_IMAGE            imagem Docker (padrão vllm/vllm-openai:latest)
 
@@ -53,8 +56,11 @@ if [[ -z "${STY}" && -z "${TMUX}" && -z "${DOCKER_BENCHMARK_INNER}" ]]; then
         MODEL1_REASONING_PARSER="${MODEL1_REASONING_PARSER:-}" \
         MODEL2_REASONING_PARSER="${MODEL2_REASONING_PARSER:-}" \
         VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-}" \
+        VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-}" \
         VLLM_ENFORCE_EAGER="${VLLM_ENFORCE_EAGER:-}" \
         VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-}" \
+        VLLM_TRANSFORMERS_VERSION="${VLLM_TRANSFORMERS_VERSION:-}" \
+        VLLM_MISTRAL_COMMON_VERSION="${VLLM_MISTRAL_COMMON_VERSION:-}" \
         RUNS_PER_TARGET="${RUNS_PER_TARGET:-}" \
         VLLM_IMAGE="${VLLM_IMAGE}" \
         CONFIGS_TARGET="${CONFIGS_TARGET:-configs/full/8b/}" \
@@ -186,6 +192,7 @@ fi
 export VLLM_LOGGING_LEVEL=DEBUG
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-1800}"
 export VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-32}"
+export VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-16384}"
 
 if [ -z "${VLLM_ENFORCE_EAGER:-}" ]; then
     gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
@@ -227,7 +234,7 @@ else
     echo "Oracle:  ${MODEL2_NAME} on GPU ${MODEL2_GPU} (port ${MODEL2_PORT})"
 fi
 echo "Configs: ${CONFIGS_TARGET}"
-echo "  max_num_seqs=${VLLM_MAX_NUM_SEQS} | enforce_eager=${VLLM_ENFORCE_EAGER}"
+echo "  max_num_seqs=${VLLM_MAX_NUM_SEQS} | max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS} | enforce_eager=${VLLM_ENFORCE_EAGER}"
 echo "=========================================="
 echo ""
 
@@ -255,46 +262,41 @@ start_vllm_server() {
     local cname="vllm-$(sanitize_name "${name}")-${JOB_ID}"
     echo "Starting ${name} (GPU ${gpu}, port ${port}, TP=${tp})..." >&2
 
-    local vllm_args="--model ${model} --served-model-name ${name} --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-model-len ${max_len} --tensor-parallel-size ${tp}"
+    local vllm_args="--model ${model} --served-model-name ${name} --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-num-batched-tokens ${VLLM_MAX_NUM_BATCHED_TOKENS} --max-model-len ${max_len} --tensor-parallel-size ${tp} --enable-prefix-caching --disable-log-requests"
     [ "${VLLM_ENFORCE_EAGER}" = "true" ] && vllm_args="${vllm_args} --enforce-eager"
     [ -n "${parser}" ] && vllm_args="${vllm_args} --reasoning-parser ${parser}"
 
     mkdir -p "$(dirname "${log}")" 2>/dev/null || true
 
-    # VLLM_PRE_INSTALL: space-separated pip packages to install before starting vLLM.
-    # Useful when the image's transformers is too old for a new model architecture.
-    # Example: VLLM_PRE_INSTALL="--upgrade transformers"
-    local pre_install="${VLLM_PRE_INSTALL:-}"
-    if [ -n "${pre_install}" ]; then
-        docker run -d \
-            --name "${cname}" \
-            --gpus all \
-            -e CUDA_VISIBLE_DEVICES="${gpu}" \
-            --ipc=host \
-            --network=host \
-            -v "${HOME}/hf-cache:/root/.cache/huggingface" \
-            -v "${PROJECT_DIR}/.pip-cache:/root/.cache/pip" \
-            -e HF_TOKEN="${HF_TOKEN}" \
-            -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL}" \
-            -e VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S}" \
-            --entrypoint bash \
-            "${VLLM_IMAGE}" \
-            -c "pip install --quiet ${pre_install} && python3 -m vllm.entrypoints.openai.api_server ${vllm_args}" \
-            > /dev/null 2>&1
-    else
-        docker run -d \
-            --name "${cname}" \
-            --gpus all \
-            -e CUDA_VISIBLE_DEVICES="${gpu}" \
-            --ipc=host \
-            --network=host \
-            -v "${HOME}/hf-cache:/root/.cache/huggingface" \
-            -e HF_TOKEN="${HF_TOKEN}" \
-            -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL}" \
-            -e VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S}" \
-            "${VLLM_IMAGE}" \
-            ${vllm_args} > /dev/null 2>&1
+    # Pin transformers + mistral_common before starting vLLM.
+    # Needed for newer model architectures (e.g. Gemma-4) not yet in the bundled image.
+    # Override via VLLM_TRANSFORMERS_VERSION / VLLM_MISTRAL_COMMON_VERSION; set to
+    # empty string to skip the install entirely.
+    local tf_version="${VLLM_TRANSFORMERS_VERSION:-5.7.0}"
+    local mc_version="${VLLM_MISTRAL_COMMON_VERSION:-1.11.1}"
+    local pip_prefix=""
+    if [ -n "${tf_version}" ] || [ -n "${mc_version}" ]; then
+        local pip_pkgs=""
+        [ -n "${tf_version}" ] && pip_pkgs="${pip_pkgs} transformers==${tf_version}"
+        [ -n "${mc_version}" ] && pip_pkgs="${pip_pkgs} mistral_common==${mc_version}"
+        pip_prefix="pip install --quiet${pip_pkgs} && "
     fi
+
+    docker run -d \
+        --name "${cname}" \
+        --gpus all \
+        -e CUDA_VISIBLE_DEVICES="${gpu}" \
+        --ipc=host \
+        --network=host \
+        -v "${HOME}/hf-cache:/root/.cache/huggingface" \
+        -v "${PROJECT_DIR}/.pip-cache:/root/.cache/pip" \
+        -e HF_TOKEN="${HF_TOKEN}" \
+        -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL}" \
+        -e VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S}" \
+        --entrypoint bash \
+        "${VLLM_IMAGE}" \
+        -c "${pip_prefix}python3 -m vllm.entrypoints.openai.api_server ${vllm_args}" \
+        > /dev/null 2>&1
 
     # Forward container logs to file in background
     docker logs -f "${cname}" >> "${log}" 2>&1 &
