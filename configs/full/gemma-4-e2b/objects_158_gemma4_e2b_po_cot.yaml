@@ -36,7 +36,7 @@ dataset:
   runs_per_target: 1
 experiment:
   name: "objects_158_gemma4_e2b_po_cot"
-  max_workers: 16
+  max_workers: 32
   tags: {}
 
 output:
