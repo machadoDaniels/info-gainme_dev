@@ -235,17 +235,18 @@ clear
 # Usage: wait_vllm_ready <pid> <port> <name> [timeout_seconds]
 wait_vllm_ready() {
     local pid=$1 port=$2 name=$3 timeout=${4:-1800}
+    local safe_name="${name//\//_}"
     local elapsed=0
     echo "Waiting up to ${timeout}s for ${name} on port ${port} (pid=${pid})..."
     while ! curl -s http://localhost:${port}/v1/models > /dev/null 2>&1; do
         if ! kill -0 ${pid} 2>/dev/null; then
             echo "ERROR: vLLM process ${pid} for ${name} died before readiness"
-            tail -n 50 "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${name}.log" 2>/dev/null || true
+            tail -n 50 "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${safe_name}.log" 2>/dev/null || true
             exit 1
         fi
         if [ ${elapsed} -ge ${timeout} ]; then
             echo "ERROR: ${name} not ready after ${timeout}s — aborting"
-            tail -n 50 "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${name}.log" 2>/dev/null || true
+            tail -n 50 "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${safe_name}.log" 2>/dev/null || true
             kill ${pid} 2>/dev/null || true
             exit 1
         fi
@@ -255,14 +256,14 @@ wait_vllm_ready() {
     echo "✓ ${name} ready after ${elapsed}s"
 }
 
-PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL1_NAME}.log" "${MODEL1_REASONING_PARSER}" "${MODEL1_TP}")
+PID1=$(start_vllm_server "${MODEL1}" "${MODEL1_NAME}" ${MODEL1_PORT} ${MODEL1_GPU} ${MODEL1_GPU_MEM} ${MODEL1_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL1_NAME//\//_}.log" "${MODEL1_REASONING_PARSER}" "${MODEL1_TP}")
 wait_vllm_ready ${PID1} ${MODEL1_PORT} "${MODEL1_NAME}" "${VLLM_ENGINE_READY_TIMEOUT_S}"
 echo ""
 
 # Start second model only in dual mode
 PID2=""
 if [ "${MODE}" = "dual" ]; then
-    PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL2_NAME}.log" "${MODEL2_REASONING_PARSER}" "${MODEL2_TP}")
+    PID2=$(start_vllm_server "${MODEL2}" "${MODEL2_NAME}" ${MODEL2_PORT} ${MODEL2_GPU} ${MODEL2_GPU_MEM} ${MODEL2_MAX_LEN} "${LOGS_DIR_HOST}/info-gainme-full-${SLURM_JOB_ID}-vllm-${MODEL2_NAME//\//_}.log" "${MODEL2_REASONING_PARSER}" "${MODEL2_TP}")
     wait_vllm_ready ${PID2} ${MODEL2_PORT} "${MODEL2_NAME}" "${VLLM_ENGINE_READY_TIMEOUT_S}"
     echo ""
 elif [ "${MODE}" = "single" ]; then

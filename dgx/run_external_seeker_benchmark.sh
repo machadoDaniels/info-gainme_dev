@@ -76,7 +76,7 @@ echo ""
 # ============================================
 # Start oracle/pruner vLLM
 # ============================================
-VLLM_LOG="${LOGS_DIR}/info-gainme-ext-${SLURM_JOB_ID}-vllm-${MODEL1_NAME}.log"
+VLLM_LOG="${LOGS_DIR}/info-gainme-ext-${SLURM_JOB_ID}-vllm-${MODEL1_NAME//\//_}.log"
 
 CMD="/usr/bin/python3 -m vllm.entrypoints.openai.api_server \
   --model ${MODEL1} \
