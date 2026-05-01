@@ -100,7 +100,7 @@ vllm_cmd="/usr/bin/python3 -m vllm.entrypoints.openai.api_server \
   --tensor-parallel-size ${NUM_GPUS} \
   --max-model-len ${MODEL_MAX_LEN} \
   --enable-prefix-caching \
-  --no-enable-log-requests"
+ "
 
 # Adicionar reasoning_parser se fornecido
 if [ -n "${MODEL_REASONING_PARSER}" ]; then

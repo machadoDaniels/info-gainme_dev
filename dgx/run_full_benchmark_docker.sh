@@ -262,7 +262,7 @@ start_vllm_server() {
     local cname="vllm-$(sanitize_name "${name}")-${JOB_ID}"
     echo "Starting ${name} (GPU ${gpu}, port ${port}, TP=${tp})..." >&2
 
-    local vllm_args="--model ${model} --served-model-name ${name} --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-num-batched-tokens ${VLLM_MAX_NUM_BATCHED_TOKENS} --max-model-len ${max_len} --tensor-parallel-size ${tp} --enable-prefix-caching --no-enable-log-requests"
+    local vllm_args="--model ${model} --served-model-name ${name} --port ${port} --host 0.0.0.0 --gpu-memory-utilization ${gpu_mem} --max-num-seqs ${VLLM_MAX_NUM_SEQS} --max-num-batched-tokens ${VLLM_MAX_NUM_BATCHED_TOKENS} --max-model-len ${max_len} --tensor-parallel-size ${tp} --enable-prefix-caching"
     [ "${VLLM_ENFORCE_EAGER}" = "true" ] && vllm_args="${vllm_args} --enforce-eager"
     [ -n "${parser}" ] && vllm_args="${vllm_args} --reasoning-parser ${parser}"
 
