@@ -163,27 +163,36 @@ def _resolve_base_url(model: str, cli_url: Optional[str]) -> str:
 
 
 def find_conversation_dirs_from_runs_csv(
-    runs_csv_path: Path, 
-    outputs_base_dir: Path
+    runs_csv_path: Path,
+    outputs_base_dir: Path,
+    only_run_index: Optional[int] = None,
 ) -> List[Path]:
     """
     Reads a runs.csv file and returns a list of unique conversation directory paths.
-    
+
     Args:
         runs_csv_path: Path to runs.csv file.
         outputs_base_dir: Base directory where conversation paths are relative to.
-        
+        only_run_index: If given, keep only rows matching this run_index (e.g. 1
+            to evaluate just run01 of every target).
+
     Returns:
         List of conversation directory paths.
     """
     conversation_dirs = set()
-    
+
     if not runs_csv_path.exists():
         raise FileNotFoundError(f"runs.csv not found: {runs_csv_path}")
-    
+
     with runs_csv_path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            if only_run_index is not None:
+                try:
+                    if int(row.get("run_index", "")) != only_run_index:
+                        continue
+                except (TypeError, ValueError):
+                    continue
             conversation_path_str = row.get("conversation_path")
             if conversation_path_str:
                 # conversation_path is relative to outputs_base_dir
@@ -192,7 +201,7 @@ def find_conversation_dirs_from_runs_csv(
                     conversation_dirs.add(full_conversation_path)
                 else:
                     logger.warning("Conversation directory not found: %s", full_conversation_path)
-    
+
     return sorted(list(conversation_dirs))
 
 
@@ -465,10 +474,13 @@ def run_for_csv(
     force: bool,
     dry_run: bool,
     dataset_csv: Optional[Path],
+    only_run_index: Optional[int] = None,
 ) -> int:
     """Process a single runs.csv. Returns 0 on success, 1 if any errors."""
     try:
-        conversation_dirs = find_conversation_dirs_from_runs_csv(runs_csv_path, outputs_base_dir)
+        conversation_dirs = find_conversation_dirs_from_runs_csv(
+            runs_csv_path, outputs_base_dir, only_run_index=only_run_index,
+        )
     except FileNotFoundError as e:
         logger.error("Error: %s", e)
         return 1
@@ -607,6 +619,13 @@ def main():
              "question_evaluation.json files into the unified JSONL.",
     )
     parser.add_argument(
+        "--only-run-index",
+        type=int,
+        default=None,
+        help="If given, evaluate only conversations whose runs.csv row has this "
+             "run_index (e.g. 1 to keep just run01).",
+    )
+    parser.add_argument(
         "--max-workers",
         type=int,
         default=1,
@@ -655,6 +674,8 @@ def main():
     if args.all:
         runs_csvs = find_cot_runs_csvs(args.outputs_base_dir)
         logger.info("🔎 %d CoT runs.csv found under %s", len(runs_csvs), args.outputs_base_dir)
+        if args.only_run_index is not None:
+            logger.info("🎯 Filtering to run_index=%d only", args.only_run_index)
         any_error = False
         for i, runs_csv in enumerate(runs_csvs, 1):
             logger.info("\n[%d/%d] %s", i, len(runs_csvs), runs_csv.parent.name)
@@ -662,6 +683,7 @@ def main():
                 runs_csv, args.outputs_base_dir, oracle_config, pruner_config,
                 unified_jsonl, done_keys,
                 args.max_workers, args.force, args.dry_run, args.dataset_csv,
+                only_run_index=args.only_run_index,
             )
             if rc != 0:
                 any_error = True
@@ -674,6 +696,7 @@ def main():
             args.runs_csv_path, args.outputs_base_dir, oracle_config, pruner_config,
             unified_jsonl, done_keys,
             args.max_workers, args.force, args.dry_run, args.dataset_csv,
+            only_run_index=args.only_run_index,
         )
 
 

@@ -44,7 +44,7 @@ SINGULARITY_IMAGE="/raid/user_danielpedrozo/images/vllm_openai_latest.sif"
 if [ -z "${STY:-}" ] && [ "${FOREGROUND:-0}" != "1" ]; then
     mkdir -p "${PROJECT_DIR}/logs"
     echo "Iniciando screen 'eval-choices' (run=${RUN_TS})..."
-    screen -dmS eval-choices bash -c "RUN_TS='${RUN_TS}' BACKEND='${BACKEND:-}' MAX_WORKERS='${MAX_WORKERS:-}' FORCE='${FORCE:-}' DRY_RUN='${DRY_RUN:-}' TEMPERATURE='${TEMPERATURE:-}' bash '${BASH_SOURCE[0]}' ${1:-}; exec bash"
+    screen -dmS eval-choices bash -c "RUN_TS='${RUN_TS}' BACKEND='${BACKEND:-}' MAX_WORKERS='${MAX_WORKERS:-}' FORCE='${FORCE:-}' DRY_RUN='${DRY_RUN:-}' TEMPERATURE='${TEMPERATURE:-}' ONLY_RUN_INDEX='${ONLY_RUN_INDEX:-}' bash '${BASH_SOURCE[0]}' ${1:-}; exec bash"
     echo "  screen -r eval-choices"
     echo "  tail -f ${PROJECT_DIR}/logs/eval-choices-latest.out"
     exit 0
@@ -71,9 +71,10 @@ case "$BACKEND" in
 esac
 
 EXTRA_FLAGS=""
-[[ "${FORCE}" == "1" ]]        && EXTRA_FLAGS+=" --force"
-[[ "${DRY_RUN}" == "1" ]]      && EXTRA_FLAGS+=" --dry-run"
-[[ -n "${TEMPERATURE:-}" ]]    && EXTRA_FLAGS+=" --temperature ${TEMPERATURE}"
+[[ "${FORCE}" == "1" ]]            && EXTRA_FLAGS+=" --force"
+[[ "${DRY_RUN}" == "1" ]]          && EXTRA_FLAGS+=" --dry-run"
+[[ -n "${TEMPERATURE:-}" ]]        && EXTRA_FLAGS+=" --temperature ${TEMPERATURE}"
+[[ -n "${ONLY_RUN_INDEX:-}" ]]     && EXTRA_FLAGS+=" --only-run-index ${ONLY_RUN_INDEX}"
 
 mkdir -p "${PROJECT_DIR}/logs"
 
