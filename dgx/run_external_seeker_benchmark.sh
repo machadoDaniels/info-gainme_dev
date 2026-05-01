@@ -93,7 +93,6 @@ CMD="/usr/bin/python3 -m vllm.entrypoints.openai.api_server \
 echo "Starting ${MODEL1_NAME}..."
 nohup singularity exec --nv \
     --bind /raid/user_danielpedrozo:/workspace \
-    --bind "/usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/local/cuda/compat/lib/libcuda.so.1" \
     --bind /dev/shm:/dev/shm \
     --pwd /workspace \
     --env HF_TOKEN=${HF_TOKEN} \
