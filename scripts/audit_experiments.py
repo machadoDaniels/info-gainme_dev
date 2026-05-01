@@ -225,6 +225,51 @@ def print_summary(rows, include_ont: bool = False):
     print(f"Excluding ablation ({sum(1 for r in rows if not r['is_ablation']):>3}): {dict(main)}")
 
 
+def _normalize_seeker(name: str) -> str:
+    """Strip org prefix (Qwen/Foo → Foo) so different config conventions group together."""
+    if not name or name == "?":
+        return name or "?"
+    return name.split("/", 1)[-1]
+
+
+def print_summary_by_seeker(rows, include_ont: bool = False):
+    by_seeker = defaultdict(lambda: {"DONE": 0, "PARTIAL": 0, "MISSING": 0, "?": 0,
+                                     "ERROR": 0, "total": 0, "actual": 0, "expected": 0,
+                                     "ont": 0})
+    for r in rows:
+        if r["is_ablation"]:
+            continue
+        seeker = _normalize_seeker(r["seeker"])
+        s = by_seeker[seeker]
+        s[r["status"]] += 1
+        s["total"] += 1
+        s["actual"] += r.get("best_actual", r["actual"]) if include_ont else r["actual"]
+        s["expected"] += r["expected"]
+        if include_ont:
+            s["ont"] += r.get("ont_actual", 0)
+
+    if not by_seeker:
+        return
+
+    print("\nBy seeker model (excluding ablation):")
+    if include_ont:
+        print(f"{'seeker':<32} {'DONE':>5} {'PART':>5} {'MISS':>5} {'tot':>5}  "
+              f"{'best_rows':>13}  {'pct':>6}  {'_ont rows':>10}")
+    else:
+        print(f"{'seeker':<32} {'DONE':>5} {'PART':>5} {'MISS':>5} {'tot':>5}  "
+              f"{'rows':>13}  {'pct':>6}")
+    print("-" * (94 if include_ont else 84))
+    for k in sorted(by_seeker):
+        s = by_seeker[k]
+        pct = 100.0 * s["actual"] / s["expected"] if s["expected"] else 0.0
+        line = (f"{k:<32} {s['DONE']:>5} {s['PARTIAL']:>5} {s['MISSING']:>5} "
+                f"{s['total']:>5}  {s['actual']:>5}/{s['expected']:<6} {pct:>5.1f}%")
+        if include_ont:
+            line += f"  {s['ont']:>10}"
+        print(line)
+    print("-" * (94 if include_ont else 84))
+
+
 def write_csv(rows, path: Path):
     if not rows:
         print(f"no rows to write — {path} skipped")
@@ -256,6 +301,7 @@ def main():
 
     rows = audit(args.root, include_ont=args.include_ont, only_run=args.only_run)
     print_summary(rows, include_ont=args.include_ont)
+    print_summary_by_seeker(rows, include_ont=args.include_ont)
     if not args.no_csv:
         suffix = ""
         if args.only_run is not None:
