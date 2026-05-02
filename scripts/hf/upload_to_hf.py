@@ -148,7 +148,11 @@ def main() -> int:
                 repo_id=repo_id,
                 repo_type="dataset",
                 num_workers=args.num_workers,
-                ignore_patterns=[".cache/**"],
+                # conversations/** is bundled into conversations.zip per experiment
+                # (see scripts/hf/zip_experiments.py). Uploading the loose tree
+                # would explode the file count and trigger HF's 128 commits/hour
+                # rate limit.
+                ignore_patterns=[".cache/**", "**/conversations/**"],
                 print_report_every=report_every,
             )
             break
