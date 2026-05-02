@@ -42,7 +42,6 @@ if [ -z "${STY:-}" ] && [ "${FOREGROUND:-0}" != "1" ]; then
         BACKEND='${BACKEND:-}' BASE_URL='${BASE_URL:-}' API_KEY='${API_KEY:-}' MODEL='${MODEL:-}' \
         WHAT='${WHAT:-}' RUN_INDEX='${RUN_INDEX:-}' SAMPLE_INDICES='${SAMPLE_INDICES:-}' \
         WORKERS='${WORKERS:-}' TURN_WORKERS='${TURN_WORKERS:-}' FORCE='${FORCE:-}' \
-        MAX_INPUT_TOKENS='${MAX_INPUT_TOKENS:-}' \
         bash '${BASH_SOURCE[0]}' ${1:-}; exec bash"
     echo "  screen -r judge-eval"
     echo "  tail -f ${PROJECT_DIR}/logs/judge-eval-latest.out"
@@ -93,14 +92,9 @@ else
 fi
 
 EXTRA_FLAGS=""
-[[ -n "${RUN_INDEX}" ]]        && EXTRA_FLAGS+=" --run-index ${RUN_INDEX}"
-[[ -n "${SAMPLE_INDICES}" ]]   && EXTRA_FLAGS+=" --sample-indices ${SAMPLE_INDICES}"
-[[ "${FORCE}" == "1" ]]        && EXTRA_FLAGS+=" --force"
-# MAX_INPUT_TOKENS is no longer needed — judge_evaluation now bails on the
-# server's 400 BadRequestError ("context length exceeded") after a single try
-# and marks the turn skipped. Set MAX_INPUT_TOKENS to opt back into the
-# tiktoken-based pre-skip if desired.
-[[ -n "${MAX_INPUT_TOKENS}" ]] && EXTRA_FLAGS+=" --max-input-tokens ${MAX_INPUT_TOKENS}"
+[[ -n "${RUN_INDEX}" ]]      && EXTRA_FLAGS+=" --run-index ${RUN_INDEX}"
+[[ -n "${SAMPLE_INDICES}" ]] && EXTRA_FLAGS+=" --sample-indices ${SAMPLE_INDICES}"
+[[ "${FORCE}" == "1" ]]      && EXTRA_FLAGS+=" --force"
 
 mkdir -p "${PROJECT_DIR}/logs"
 
@@ -120,7 +114,6 @@ echo "Judge model:   ${MODEL}"
 echo "What:          ${WHAT} (${TARGETS[*]})"
 echo "Workers:       ${WORKERS} × turn-workers ${TURN_WORKERS}"
 echo "Filters:       run_index=${RUN_INDEX:-all} sample_indices=${SAMPLE_INDICES:-all}"
-echo "Max input:     ${MAX_INPUT_TOKENS:-(no pre-skip)} tokens (turns above this are marked skipped)"
 echo "Target:        ${TARGET_PATH:-(all CoT runs.csv)}"
 echo "Log:           ${LOG_FILE}"
 echo "Started:       $(date)"

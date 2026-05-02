@@ -196,7 +196,10 @@ def main() -> None:
 
     def _one(conv: Path) -> tuple[str, Optional[str]]:
         try:
-            _, was_skipped = run_eval(kind, conv, adapter, args.turn_workers, overwrite=args.force)
+            _, was_skipped = run_eval(
+                kind, conv, adapter, args.turn_workers,
+                overwrite=args.force,
+            )
             return ("skip" if was_skipped else "ok"), None
         except Exception as exc:
             return "fail", f"{type(exc).__name__}: {exc}"
