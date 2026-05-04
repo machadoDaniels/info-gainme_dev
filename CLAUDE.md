@@ -486,6 +486,93 @@ If the local stash held something you actually wanted, replace `git stash drop` 
 - `dgx-H100-02` — `10.100.0.112`
 - `dgx-H100-03` — `10.100.0.113`
 - `dgx-B200-1` — `10.100.0.121`
+- `dgx-A100` — SSH alias for the Docker node (no SLURM); user `temp_daniel`, project at `~/projects/info-gainme`
+
+## Running on the Docker node (dgx-A100)
+
+The Docker node has no SLURM — use `dgx/run_full_benchmark_docker.sh` instead of `run_full_benchmark.sh`. It starts vLLM via `docker run` (image `vllm/vllm-openai:latest`) and the benchmark via another container.
+
+**Connect:** `ssh dgx-A100` (user `temp_daniel`)
+
+**Available GPUs:** 7× A100 80GB (indices 0–6). GPUs are not reserved — check with `nvidia-smi` before launching.
+
+**HF model cache:** `~/hf-cache/hub/` (owned by root due to Docker; use `docker run --rm -v ~/hf-cache:/cache alpine chmod -R 777 /cache/hub` before rsync if permission denied).
+
+**Pip cache:** `~/projects/info-gainme/.pip-cache` — mounted into containers so repeated launches don't re-download packages.
+
+**Key differences from SLURM/Singularity:**
+- No `sbatch` — launch directly with `screen` + env vars
+- `VLLM_ENFORCE_EAGER` auto-detected: A100 → `true` (eager); override with `VLLM_ENFORCE_EAGER=false` to enable CUDA graphs (recommended for small models like 0.6B)
+- Always uses `--entrypoint bash` + pip install step before vLLM (pins `transformers==5.7.0` + `mistral_common==1.11.1` by default via `VLLM_TRANSFORMERS_VERSION` / `VLLM_MISTRAL_COMMON_VERSION`)
+- `--enable-prefix-caching` and `--no-enable-log-requests` always active
+- Ports derived from `$$` (PID) instead of SLURM job ID
+
+**Typical launch (seeker_only — oracle/pruner external on H3):**
+```bash
+screen -dmS "mymodel-gpu0" env \
+  MODE=seeker_only \
+  MODEL1=Qwen/Qwen3-0.6B \
+  MODEL1_NAME=Qwen3-0.6B \
+  MODEL2_NAME=Qwen3-8B \
+  VLLM_ENFORCE_EAGER=false \
+  GPUS=0 \
+  CONFIGS_TARGET=configs/full/0.6b/geo_160_0.6b_io_cot.yaml \
+  bash dgx/run_full_benchmark_docker.sh
+```
+
+**Run multiple configs in parallel (one GPU each):**
+```bash
+cd ~/projects/info-gainme
+declare -A SPECS=([0]=configs/full/0.6b/geo_160_0.6b_io_cot.yaml [2]=configs/full/0.6b/geo_160_0.6b_io_no_cot.yaml)
+for gpu in 0 2; do
+  cfg=${SPECS[$gpu]}
+  screen -dmS "run-gpu${gpu}" env MODE=seeker_only MODEL1=Qwen/Qwen3-0.6B MODEL1_NAME=Qwen3-0.6B \
+    MODEL2_NAME=Qwen3-8B VLLM_ENFORCE_EAGER=false GPUS="$gpu" CONFIGS_TARGET="$cfg" \
+    bash dgx/run_full_benchmark_docker.sh
+done
+```
+
+**Models needing newer transformers (e.g. Gemma-4):** set `VLLM_TRANSFORMERS_VERSION=5.7.0` (default) — already handled automatically. For gemma-4 also set `VLLM_MISTRAL_COMMON_VERSION=1.11.1`.
+
+**Running a local oracle/pruner on a free GPU** (avoids H3 network latency):
+```bash
+# Start Qwen3-8B on GPU 1
+source ~/projects/info-gainme/.env
+docker run -d --name vllm-Qwen3-8B-local --gpus all -e CUDA_VISIBLE_DEVICES=1 \
+  --ipc=host --network=host \
+  -v ~/hf-cache:/root/.cache/huggingface \
+  -v ~/projects/info-gainme/.pip-cache:/root/.cache/pip \
+  -e HF_TOKEN=${HF_TOKEN} --entrypoint bash vllm/vllm-openai:latest \
+  -c 'pip install -q transformers==5.7.0 mistral_common==1.11.1 && \
+      python3 -m vllm.entrypoints.openai.api_server \
+        --model Qwen/Qwen3-8B --served-model-name Qwen3-8B \
+        --port 8199 --host 0.0.0.0 --gpu-memory-utilization 0.90 \
+        --max-num-seqs 64 --max-num-batched-tokens 16384 --max-model-len 32000 \
+        --enable-prefix-caching --no-enable-log-requests --reasoning-parser qwen3'
+
+# Update servers.yaml to use local oracle (revert when done!)
+sed -i 's|Qwen3-8B: "http://10.100.0.113:8800/v1"|Qwen3-8B: "http://localhost:8199/v1"|' configs/servers.yaml
+# Restore: sed -i 's|Qwen3-8B: "http://localhost:8199/v1"|Qwen3-8B: "http://10.100.0.113:8800/v1"|' configs/servers.yaml
+```
+
+**Copy model from H100-02 to avoid HF download:**
+```bash
+# Fix permissions first, then rsync
+docker run --rm -v ~/hf-cache:/cache alpine chmod -R 777 /cache/hub
+rsync -a user_danielpedrozo@10.100.0.112:/raid/user_danielpedrozo/hf-cache/hub/models--Qwen--Qwen3-8B/ \
+  ~/hf-cache/hub/models--Qwen--Qwen3-8B/
+```
+
+**Sync outputs to H100-02:**
+```bash
+rsync -av --update \
+  ~/projects/info-gainme/outputs/models/<triple>/ \
+  user_danielpedrozo@10.100.0.112:/raid/user_danielpedrozo/projects/info-gainme_dev/outputs/models/<triple>/
+```
+
+**Delete Docker-owned files** (permission denied with rm): use `docker run --rm -v <host-path>:/target alpine rm -rf /target/<subdir>`.
+
+**Logs:** `~/projects/info-gainme/logs/info-gainme-docker-<PID>-vllm-<MODELNAME>.log`
 
 **Cross-user rsync:** if files on the target belong to another user, pull from the target as that user instead of pushing:
 ```bash
